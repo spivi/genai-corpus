@@ -1,0 +1,8 @@
+Fixture creative brief — Backprop Boys, "No Weights Attached" album era.
+
+Subject: album-cover concept sketch, teal/magenta/mustard palette, marionette-strings
+motif visible on at least one figure. 90s cel-shaded line treatment, flat fill, no
+gradients on subjects.
+
+This file is a synthetic loader fixture (SPZ-43), not corpus content. Real corpus
+generation is SPZ-45.

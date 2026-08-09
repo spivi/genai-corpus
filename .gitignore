@@ -1,0 +1,62 @@
+# --- Media, by extension — the corpus never enters git (SPZ-43) ---
+# GitHub LFS free tier is ~1 GB against a 5 GB corpus cap. Real corpus media lives on
+# Hugging Face (SPZ-45). This list is the enforcement mechanism, not a note in a README —
+# treat any addition to the real corpus's asset kinds as an addition here too.
+# Images
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.tiff
+*.tif
+*.webp
+*.svg
+*.heic
+*.psd
+# Audio
+*.mp3
+*.wav
+*.flac
+*.ogg
+*.m4a
+*.aac
+*.wma
+# Video
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.webm
+*.m4v
+# Model weights — never local disk per the M4 plan; Modal volumes only
+*.pt
+*.pth
+*.safetensors
+*.ckpt
+*.bin
+*.onnx
+*.h5
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# --- Notebooks ---
+.ipynb_checkpoints/
+
+# --- Editors / OS ---
+.vscode/
+.idea/
+.DS_Store

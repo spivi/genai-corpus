@@ -1,0 +1,9 @@
+Fixture transcript excerpt — mock interview snippet used to exercise the "text
+document" asset kind end to end.
+
+Q: What made the marionette motif work?
+A: It's the one thing base models won't draw on their own without it being asked for
+directly, so it's the part of the style an adapter can actually be measured on.
+
+This file is a synthetic loader fixture (SPZ-43), not corpus content. Real corpus
+generation is SPZ-45.

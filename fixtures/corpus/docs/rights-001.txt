@@ -1,0 +1,9 @@
+Fixture rights-and-usage note.
+
+Asset: fictional-band promotional sketch, generated asset, no real likeness. Cleared
+for use in the Generative AI Engineering series (spivitz.com) under the same terms as
+the rest of the corpus. This is the failure mode C2 demonstrates: a visually similar
+asset without a note like this one is not usable, however good the retrieval match.
+
+This file is a synthetic loader fixture (SPZ-43), not corpus content. Real corpus
+generation is SPZ-45.
