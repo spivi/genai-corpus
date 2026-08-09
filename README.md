@@ -19,8 +19,8 @@ Pinned to a commit, from any consuming repo's `pyproject.toml`:
 genai-corpus @ git+https://github.com/spivi/genai-corpus.git@<commit-sha>
 ```
 
-Never pin to a branch — see `SERIES-REPOS.md` in the `spivitz-vault` wiki
-(`decisions/SPZ-D019-genai-series-repo-scaffold`) for why.
+Never pin to a branch: a moving dependency would mean a unit's published ledger
+numbers were measured against code that no longer exists.
 
 ## Development
 
