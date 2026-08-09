@@ -55,6 +55,10 @@ htmlcov/
 
 # --- Notebooks ---
 .ipynb_checkpoints/
+# nbconvert output, written by the README's local command and by CI's notebook
+# smoke test — never the notebook source itself.
+*.nbconvert.ipynb
+executed_*.ipynb
 
 # --- Editors / OS ---
 .vscode/
