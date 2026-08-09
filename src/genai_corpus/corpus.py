@@ -41,12 +41,29 @@ def load_manifest(manifest_path: str | Path) -> list[CorpusAsset]:
     ]
 
 
+def _sha256_of(path: Path) -> str:
+    """Hash a file in fixed-size chunks so a ~5 GB asset never loads whole."""
+    digest = hashlib.sha256()
+    with path.open("rb") as f:
+        while chunk := f.read(1 << 20):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def verify_checksums(manifest_path: str | Path, corpus_root: str | Path) -> list[str]:
-    """Return the ids of assets whose on-disk sha256 doesn't match the manifest."""
+    """Return the ids of assets whose on-disk sha256 doesn't match the manifest.
+
+    An asset with no file on disk at all counts as a mismatch too, rather than
+    raising — a missing asset is the most likely real failure for this check.
+    """
     root = Path(corpus_root)
     mismatches: list[str] = []
     for asset in load_manifest(manifest_path):
-        digest = hashlib.sha256((root / asset.path).read_bytes()).hexdigest()
+        try:
+            digest = _sha256_of(root / asset.path)
+        except FileNotFoundError:
+            mismatches.append(asset.id)
+            continue
         if digest != asset.sha256:
             mismatches.append(asset.id)
     return mismatches
