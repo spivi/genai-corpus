@@ -40,9 +40,42 @@ _LEDGER_DATA: dict[str, Any] = {
     "quality_metric_name": NOT_APPLICABLE,
     "quality_metric_value": NOT_APPLICABLE,
     "failure_rate": 0.0,
-    "per_unit_metrics": [{"name": "tokens_per_dollar", "value": 500.0, "unit": "tokens/usd"}],
+    # Deliberately not a round number: a fixture of `500.0` survives any rounding a
+    # lossy formatter could apply, so it would prove nothing about the metric rows.
+    "per_unit_metrics": [
+        {"name": "tokens_per_dollar", "value": 3.4246967090293765, "unit": "tokens/usd"}
+    ],
     "not_applicable_reasons": {"cpu_active_seconds": "not measured: billed span only"},
 }
+
+#: Every mandated float here survives rounding to one decimal, so the only row a lossy
+#: formatter can damage is the per-unit metric. That makes it the fixture that proves
+#: the per-unit-metric arm of the round-trip check does the catching, rather than a
+#: mandated row failing first and hiding a gap behind it.
+_ROUND_MANDATED_FLOATS: dict[str, Any] = {
+    **_LEDGER_DATA,
+    "cost_per_result_usd": 0.5,
+    "cost_per_1000_results_usd": 500.0,
+    "per_unit_metrics": [
+        {"name": "billed_container_seconds", "value": 3.4246967090293765, "unit": "s"}
+    ],
+}
+
+
+def _assert_metric_rows_equal_the_ledgers(ledger: CostLedger, parsed: dict[str, str]) -> None:
+    """The same non-circular check, extended to `per_unit_metrics`.
+
+    Not decoration: the SPZ-44 review's P1 fix moved `billed_container_seconds` and
+    `hardware_rate_usd_per_second` — the two numbers every published cost is derived
+    from — out of `ROW_ORDER` and into these rows. A renderer that rounded them to one
+    decimal would publish a rate of `0.0`, i.e. a free run, while every mandated row
+    still round-tripped. The cell is `"<value> <unit>"` and a unit may itself contain
+    spaces, so only the first space separates them.
+    """
+    for metric in ledger.per_unit_metrics:
+        value_text, _, unit_text = parsed[metric.name].partition(" ")
+        assert float(value_text) == metric.value, f"{metric.name}: value did not round-trip"
+        assert unit_text == metric.unit, f"{metric.name}: unit did not round-trip"
 
 
 def _assert_table_numbers_equal_the_ledgers(ledger: CostLedger) -> None:
@@ -54,6 +87,7 @@ def _assert_table_numbers_equal_the_ledgers(ledger: CostLedger) -> None:
     value, and an `n/a` cell must carry the reason the ledger states.
     """
     parsed = parse_ledger_markdown_table(render_ledger_markdown_table(ledger))
+    _assert_metric_rows_equal_the_ledgers(ledger, parsed)
 
     for field_name, label in ROW_ORDER:
         value = getattr(ledger, field_name)
@@ -103,7 +137,7 @@ def test_render_ledger_markdown_table_appends_per_unit_metric_rows() -> None:
 
     table = render_ledger_markdown_table(ledger)
 
-    assert "| tokens_per_dollar | 500.0 tokens/usd |" in table
+    assert "| tokens_per_dollar | 3.4246967090293765 tokens/usd |" in table
 
 
 def test_render_and_parse_round_trips_every_field_in_the_ledger() -> None:
@@ -126,6 +160,39 @@ def test_the_round_trip_check_catches_a_lossy_formatter(
 
     with pytest.raises(AssertionError):
         _assert_table_numbers_equal_the_ledgers(validate_ledger(_LEDGER_DATA))
+
+
+def test_the_round_trip_check_catches_a_lossy_formatter_on_a_per_unit_metric_row(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The same proof, isolated to the rows the P1 fix made load-bearing.
+
+    The test above would pass even if the check skipped `per_unit_metrics` entirely —
+    a mandated float fails first. Here every mandated float is round, so an
+    `AssertionError` can only come from the metric row: `billed_container_seconds`
+    rendered as `3.4` rather than `3.4246967090293765`.
+    """
+
+    original = ledger_table._format_value
+
+    def lossy(value: object, reason: str | None = None) -> str:
+        if isinstance(value, float):
+            return str(round(value, 1))
+        return original(value, reason)
+
+    monkeypatch.setattr(ledger_table, "_format_value", lossy)
+
+    ledger = validate_ledger(_ROUND_MANDATED_FLOATS)
+    # Guard the guard: if a mandated row were lossy too, this test would pass for the
+    # wrong reason, so prove the mandated rows survive the same formatter untouched.
+    parsed = parse_ledger_markdown_table(render_ledger_markdown_table(ledger))
+    for field_name, label in ROW_ORDER:
+        value = getattr(ledger, field_name)
+        if isinstance(value, float) and not isinstance(value, bool):
+            assert float(parsed[label]) == value, f"{field_name} was damaged, not the metric row"
+
+    with pytest.raises(AssertionError, match="billed_container_seconds"):
+        _assert_table_numbers_equal_the_ledgers(ledger)
 
 
 def test_round_trip_survives_a_pipe_in_an_author_supplied_value() -> None:
