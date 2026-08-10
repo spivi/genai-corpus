@@ -25,6 +25,13 @@ field is required to be *explicit*: a measured value, or the `NOT_APPLICABLE`
 sentinel — never a bare zero standing in for "didn't measure this." `per_unit_metrics`
 is the escape hatch for anything unit-specific, addable without editing the schema.
 
+`NOT_APPLICABLE` carries exactly two meanings, and `not_applicable_reasons` keeps them
+apart: a bare `n/a` means *this unit has no such thing* (no GPU, no quality eval), and
+an `n/a` with a stated reason means *this unit did not measure it*. The reason is a
+validated field — it must name a line item that really is `not_applicable` — and it is
+published in the table beside the `n/a` it explains, so a reader is never left to guess
+which of the two a blank means.
+
 `genai_corpus.ledger_table.render_ledger_markdown_table()` turns a validated ledger
 into the two-column table an article publishes — the only path from ledger to table,
 so drift between the two is structurally impossible rather than merely discouraged.
@@ -33,11 +40,33 @@ so drift between the two is structurally impossible rather than merely discourag
 
 `genai_corpus.modal_harness.run_and_measure(call, hardware)` runs a zero-argument
 closure once (typically `lambda: some_fn.remote(x, y)`) and returns the result
-alongside the measured GPU seconds, CPU seconds, and dollar cost — one call in, one
-measurement out, so cost capture is never a step an author has to remember separately.
-`capture_library_versions()` reports the interpreter/package versions a run used, for
-the ledger's `library_versions` field (M4 plan Risk 4: a dated claim about what ran is
-reproducible fact only if the versions are pinned and recorded, not remembered).
+alongside the seconds and dollars it took — one call in, one measurement out, so cost
+capture is never a step an author has to remember separately.
+`ledger_from_measurement(measurement, unit_id, **fields)` takes it from there and
+returns a validated `CostLedger`, so no unit hand-copies a measured number into a
+literal.
+
+**What it measures is billed container time, not active compute.** The timer wraps a
+`.remote()` call from the client side, so the span includes container cold start,
+scheduling and the RPC round trip. That is the right basis for cost — Modal bills a
+container for the seconds it is up — and the wrong basis for a field named
+`gpu_active_seconds`, so the measurement is called `billed_container_seconds` and
+reaches the ledger under that name. The active-time line items stay `not_applicable`
+with that stated as the reason unless a unit supplies a real in-container measurement.
+
+Pass `function=some_fn` to `run_and_measure` to have the named `hardware` checked
+against that function's own `gpu=` spec — a function decorated `gpu="H100"` and priced
+as a `T4` would publish ~15% of its true cost, and the rate-table keys are Modal's own
+spec strings so `hardware_from_function()` can derive the key instead. Every emitted
+ledger carries the USD/second rate that priced it and the date that rate was verified,
+so a published figure is re-derivable rather than only re-assertable; the test suite
+fails once `RATE_TABLE_VERIFIED_ON` is more than `RATE_TABLE_MAX_AGE_DAYS` old.
+
+`capture_library_versions(extra=None)` reports the interpreter/package versions a run
+used, for the ledger's `library_versions` field (M4 plan Risk 4: a dated claim about
+what ran is reproducible fact only if the versions are pinned and recorded, not
+remembered). `extra` is how a unit records the libraries *it* depends on — Risk 4 is
+specifically about `torch` and `bitsandbytes`, which this package cannot see.
 
 `weights_volume()` is the one sanctioned place a later GPU unit writes model weights —
 a persistent Modal `Volume` mounted at `WEIGHTS_VOLUME_MOUNT_PATH`. No function in
@@ -51,7 +80,15 @@ never invoked by CI or any test — `modal` is a pinned dependency (vetted throu
 `/dependency-guard`: ALLOW, no CVEs, no typosquat match, `modal-labs/modal-client`
 provenance confirmed) so the package imports cleanly with no credential, but no
 automated path in this repo ever calls Modal, so no automated trigger can spend money.
-That hand-run cost **$0.0000465** (3.55 measured CPU-seconds on Modal's CPU rate).
+
+That hand-run cost **$0.0000449**: 3.42 billed container-seconds at Modal's published
+full-core CPU rate of $0.0000131/s. Both numbers are in the committed ledger, so the
+multiplication is one a reader can check. It is *not* a CPU-active-time figure — the
+probe's actual work, `sum(range(1_000_000))`, takes about **0.015 s** locally, so over
+99% of the billed span is container start-up and the RPC round trip. Read it as what
+Modal bills, and as an upper bound at that: a container that requests a fraction of a
+core (the minimum is 0.125) is billed that fraction, plus memory GiB-seconds this rate
+table does not model.
 
 ## Install
 

@@ -14,38 +14,102 @@ the field's type, or the `NOT_APPLICABLE` sentinel. A required field silently fi
 with zero teaches a reader to skim the table, so the schema forbids silence — a unit
 that doesn't measure something must say so.
 
+`NOT_APPLICABLE` has exactly two sanctioned meanings, and `not_applicable_reasons`
+is what keeps them apart: *this unit has no such thing* (no GPU, no quality eval), or
+*this unit did not measure it*. The second is only honest when the reason is stated,
+so a reason is a validated field — keyed by line-item name, required to name a field
+that really is `not_applicable`, and rendered into the published table beside the
+`n/a` it explains. A silent `n/a` is therefore always the first meaning, on purpose.
+
 `per_unit_metrics` is the escape hatch for anything unit-specific: a list of
 `{name, value, unit}` rows a build can add without editing this schema at all. A unit
-that adds none still validates — the default is an empty list.
+that adds none still validates — the default is an empty list. A row may not take the
+published label of a mandated line item, and may not repeat another row's name: both
+would silently shadow a row in the rendered table rather than add one.
 
-`validate_ledger` is the enforcement: a raw dict missing a field, carrying a field of
-the wrong type, or inventing a field outside the schema raises `LedgerValidationError`
-naming exactly which field is wrong.
+`validate_ledger` is the enforcement. It collects **every** problem in a raw dict —
+missing fields, fields outside the schema, wrong types, unsupported schema versions,
+multi-line strings that would shatter a markdown table — and raises once, listing all
+of them; `.field` names the first, `.problems` carries the rest.
 """
 
 from __future__ import annotations
 
 import json
+import re
 import types
 import typing
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from typing import Any, Final, Literal, get_args, get_origin, get_type_hints
 
 NOT_APPLICABLE: Final[str] = "not_applicable"
 NotApplicable = Literal["not_applicable"]
 
+#: The one schema shape this module implements. A ledger declaring anything else is
+#: rejected rather than parsed on a guess: a version string nothing checks is a
+#: comment, and this one is published inside every emitted ledger.
+SCHEMA_VERSION: Final[str] = "1.0"
+SUPPORTED_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset({SCHEMA_VERSION})
+
+#: (field name, published label) for the eighteen mandated line items, in the PRD's
+#: order. It lives here rather than in the serialiser because the labels are part of
+#: the contract: `per_unit_metrics` rows are validated against them.
+ROW_ORDER: Final[tuple[tuple[str, str], ...]] = (
+    ("hardware", "Hardware"),
+    ("model_name", "Model"),
+    ("model_precision", "Precision"),
+    ("input_size_bytes", "Input size (bytes)"),
+    ("output_size_bytes", "Output size (bytes)"),
+    ("assets_processed_count", "Assets processed (count)"),
+    ("embedding_or_generation_calls_count", "Embedding/generation calls (count)"),
+    ("metered_tokens_count", "Metered tokens (count)"),
+    ("gpu_active_seconds", "GPU active time (s)"),
+    ("cpu_active_seconds", "CPU active time (s)"),
+    ("storage_bytes", "Storage (bytes)"),
+    ("egress_bytes", "Egress (bytes)"),
+    ("cache_hit_rate", "Cache-hit rate"),
+    ("cost_per_result_usd", "Cost per result (USD)"),
+    ("cost_per_1000_results_usd", "Cost per 1,000 results (USD)"),
+    ("quality_metric_name", "Quality metric"),
+    ("quality_metric_value", "Quality metric value"),
+    ("failure_rate", "Failure rate"),
+)
+
+LINE_ITEM_FIELDS: Final[tuple[str, ...]] = tuple(name for name, _ in ROW_ORDER)
+RESERVED_ROW_LABELS: Final[frozenset[str]] = frozenset(label for _, label in ROW_ORDER)
+
 _NUMBER_TYPES: Final = (int, float)
 # `X | Literal[...]` resolves to `typing.Union`, not the `types.UnionType` a plain
 # `X | Y` of two classes gives — accept both so this doesn't silently stop matching.
 _UNION_ORIGINS: Final = (typing.Union, types.UnionType)
+# A ledger value is one table cell. A newline does not escape in markdown; it ends the
+# row, so a multi-line value silently truncates the published table rather than wrap.
+_LINE_BREAK = re.compile(r"[\r\n]")
+_LINE_BREAK_PROBLEM: Final = "must not contain a line break: a ledger value is one table cell"
 
 
 class LedgerValidationError(ValueError):
-    """A raw ledger dict failed validation. `.field` names exactly which one."""
+    """A raw ledger dict failed validation.
 
-    def __init__(self, field: str, problem: str) -> None:
-        self.field = field
-        super().__init__(f"field '{field}': {problem}")
+    `.field` names the first offending field and `.problems` carries every
+    `(field, problem)` pair found, so one call reports the whole set rather than
+    making a caller re-run the validator once per mistake.
+    """
+
+    def __init__(
+        self, field_name: str, problem: str, more: tuple[tuple[str, str], ...] = ()
+    ) -> None:
+        self.problems: tuple[tuple[str, str], ...] = ((field_name, problem), *more)
+        self.field = field_name
+        joined = "; ".join(f"field '{name}': {text}" for name, text in self.problems)
+        if len(self.problems) > 1:
+            joined = f"{len(self.problems)} invalid fields — {joined}"
+        super().__init__(joined)
+
+
+def _raise_problems(problems: list[tuple[str, str]]) -> typing.NoReturn:
+    first, *rest = problems
+    raise LedgerValidationError(first[0], first[1], tuple(rest))
 
 
 @dataclass(frozen=True)
@@ -61,7 +125,8 @@ class PerUnitMetric:
 class CostLedger:
     """Twelve mandated line items as eighteen typed fields, plus run metadata.
 
-    Field order follows the PRD's item order; `per_unit_metrics` is additive, last.
+    Field order follows the PRD's item order; `per_unit_metrics` and
+    `not_applicable_reasons` are additive, last.
     """
 
     unit_id: str
@@ -89,6 +154,7 @@ class CostLedger:
     failure_rate: float | NotApplicable
 
     per_unit_metrics: tuple[PerUnitMetric, ...] = ()
+    not_applicable_reasons: dict[str, str] = field(default_factory=dict)
 
 
 def _is_na_literal(candidate: Any) -> bool:
@@ -109,74 +175,163 @@ def _matches_type(value: Any, expected: Any) -> bool:
     return isinstance(value, expected)
 
 
-def _check_field(name: str, value: Any, expected: Any) -> None:
+def _line_break_problem(value: Any) -> str | None:
+    """`_LINE_BREAK_PROBLEM` if any string in `value` would break out of its cell."""
+    if isinstance(value, str):
+        texts: tuple[str, ...] = (value,)
+    elif isinstance(value, dict):
+        texts = tuple(k for k in value if isinstance(k, str))
+        texts += tuple(v for v in value.values() if isinstance(v, str))
+    else:
+        return None
+    return _LINE_BREAK_PROBLEM if any(_LINE_BREAK.search(t) for t in texts) else None
+
+
+def _field_problem(value: Any, expected: Any) -> str | None:
+    """What is wrong with one field's value, or `None` if nothing is."""
     args = get_args(expected) if get_origin(expected) in _UNION_ORIGINS else (expected,)
     na_allowed = any(_is_na_literal(a) for a in args)
     if na_allowed and value == NOT_APPLICABLE:
-        return
+        return None
     concrete = [a for a in args if not _is_na_literal(a)]
-    if any(_matches_type(value, a) for a in concrete):
-        return
-    wanted = " or ".join(str(a) for a in concrete)
-    if na_allowed:
-        wanted += f" or '{NOT_APPLICABLE}'"
-    got = type(value).__name__
-    raise LedgerValidationError(name, f"wrong type: expected {wanted}, got {got}")
+    if not any(_matches_type(value, a) for a in concrete):
+        wanted = " or ".join(str(a) for a in concrete)
+        if na_allowed:
+            wanted += f" or '{NOT_APPLICABLE}'"
+        return f"wrong type: expected {wanted}, got {type(value).__name__}"
+    return _line_break_problem(value)
 
 
 def _core_field_hints() -> dict[str, Any]:
     hints = get_type_hints(CostLedger)
     hints.pop("per_unit_metrics", None)
+    hints.pop("not_applicable_reasons", None)
     return hints
+
+
+def _core_problems(data: dict[str, Any], hints: dict[str, Any]) -> list[tuple[str, str]]:
+    problems = [(name, "missing required field") for name in sorted(hints.keys() - data.keys())]
+    problems += [
+        (name, "not part of the standard schema (use per_unit_metrics)")
+        for name in sorted(data.keys() - hints.keys())
+    ]
+    for name, expected in hints.items():
+        if name not in data:
+            continue
+        problem = _field_problem(data[name], expected)
+        if problem is not None:
+            problems.append((name, problem))
+    return problems
+
+
+def _schema_version_problem(data: dict[str, Any]) -> tuple[str, str] | None:
+    """Reject a version this validator does not implement, rather than guessing at it."""
+    version = data.get("schema_version")
+    if not isinstance(version, str) or version in SUPPORTED_SCHEMA_VERSIONS:
+        return None
+    supported = ", ".join(sorted(SUPPORTED_SCHEMA_VERSIONS))
+    problem = f"unsupported version {version!r}: this validator implements {supported}"
+    return ("schema_version", problem)
 
 
 _PER_UNIT_METRIC_KEYS: Final = {"name", "value", "unit"}
 
 
-def _validate_per_unit_metrics(items: Any) -> tuple[PerUnitMetric, ...]:
+def _metric_shape_problem(item: Any) -> str | None:
+    if not isinstance(item, dict):
+        return "must be an object with name/value/unit"
+    missing = _PER_UNIT_METRIC_KEYS - set(item)
+    if missing:
+        return f"missing key(s): {sorted(missing)}"
+    extra = set(item) - _PER_UNIT_METRIC_KEYS
+    if extra:
+        return f"unexpected key(s): {sorted(extra)}"
+    if not isinstance(item["name"], str) or not isinstance(item["unit"], str):
+        return "'name' and 'unit' must be strings"
+    if not isinstance(item["value"], _NUMBER_TYPES) or isinstance(item["value"], bool):
+        return "'value' must be a number"
+    return _line_break_problem(item["name"]) or _line_break_problem(item["unit"])
+
+
+def _metric_name_problem(name: str, seen: set[str]) -> str | None:
+    """Reject names that would shadow an existing table row instead of adding one."""
+    if name in RESERVED_ROW_LABELS:
+        return f"name {name!r} is a mandated row's published label and would shadow it"
+    if name in seen:
+        return f"duplicate metric name {name!r} would shadow the earlier row"
+    return None
+
+
+def _per_unit_metric_problems(
+    items: Any,
+) -> tuple[tuple[PerUnitMetric, ...], list[tuple[str, str]]]:
     if not isinstance(items, list):
-        raise LedgerValidationError("per_unit_metrics", "must be a list")
+        return (), [("per_unit_metrics", "must be a list")]
     metrics: list[PerUnitMetric] = []
+    problems: list[tuple[str, str]] = []
+    seen: set[str] = set()
     for i, item in enumerate(items):
         label = f"per_unit_metrics[{i}]"
-        if not isinstance(item, dict):
-            raise LedgerValidationError(label, "must be an object with name/value/unit")
-        missing = _PER_UNIT_METRIC_KEYS - set(item)
-        extra = set(item) - _PER_UNIT_METRIC_KEYS
-        if missing:
-            raise LedgerValidationError(label, f"missing key(s): {sorted(missing)}")
-        if extra:
-            raise LedgerValidationError(label, f"unexpected key(s): {sorted(extra)}")
-        if not isinstance(item["name"], str) or not isinstance(item["unit"], str):
-            raise LedgerValidationError(label, "'name' and 'unit' must be strings")
-        if not isinstance(item["value"], _NUMBER_TYPES) or isinstance(item["value"], bool):
-            raise LedgerValidationError(label, "'value' must be a number")
+        problem = _metric_shape_problem(item) or _metric_name_problem(item["name"], seen)
+        if problem is not None:
+            problems.append((label, problem))
+            continue
+        seen.add(item["name"])
         metrics.append(PerUnitMetric(name=item["name"], value=item["value"], unit=item["unit"]))
-    return tuple(metrics)
+    return tuple(metrics), problems
+
+
+def _reason_problem(name: str, reason: Any, data: dict[str, Any]) -> str | None:
+    if name not in LINE_ITEM_FIELDS:
+        return "not a mandated line-item field, so it cannot be not-applicable"
+    if not isinstance(reason, str) or not reason.strip():
+        return "must be a non-empty string explaining why the field is not applicable"
+    if _LINE_BREAK.search(reason):
+        return _LINE_BREAK_PROBLEM
+    if name in data and data[name] != NOT_APPLICABLE:
+        return f"field '{name}' carries a measured value, so it needs no reason"
+    return None
+
+
+def _reason_problems(
+    raw: Any, data: dict[str, Any]
+) -> tuple[dict[str, str], list[tuple[str, str]]]:
+    if not isinstance(raw, dict):
+        return {}, [("not_applicable_reasons", "must be an object of field name -> reason")]
+    reasons: dict[str, str] = {}
+    problems: list[tuple[str, str]] = []
+    for name in sorted(raw):
+        problem = _reason_problem(name, raw[name], data)
+        if problem is not None:
+            problems.append((f"not_applicable_reasons[{name}]", problem))
+            continue
+        reasons[name] = raw[name]
+    return reasons, problems
 
 
 def validate_ledger(data: dict[str, Any]) -> CostLedger:
-    """Validate a raw ledger dict, or raise `LedgerValidationError` naming the field.
+    """Validate a raw ledger dict, or raise `LedgerValidationError` listing every fault.
 
-    Checks, in order: every required field present, no field outside the schema,
-    every present field's type (or the `NOT_APPLICABLE` sentinel where the field
-    allows it), then `per_unit_metrics` shape.
+    Checks every required field is present, no field falls outside the schema, every
+    present field's type (or the `NOT_APPLICABLE` sentinel where the field allows it)
+    and single-line-ness, the declared `schema_version`, the shape and uniqueness of
+    `per_unit_metrics`, and that each `not_applicable_reasons` entry explains a field
+    that really is not applicable. All problems are collected and raised together.
     """
     data = dict(data)
     per_unit_raw = data.pop("per_unit_metrics", [])
+    reasons_raw = data.pop("not_applicable_reasons", {})
     hints = _core_field_hints()
-    missing = hints.keys() - data.keys()
-    if missing:
-        raise LedgerValidationError(sorted(missing)[0], "missing required field")
-    extra = data.keys() - hints.keys()
-    if extra:
-        raise LedgerValidationError(
-            sorted(extra)[0], "not part of the standard schema (use per_unit_metrics)"
-        )
-    for name, expected in hints.items():
-        _check_field(name, data[name], expected)
-    metrics = _validate_per_unit_metrics(per_unit_raw)
-    return CostLedger(**data, per_unit_metrics=metrics)
+    problems = _core_problems(data, hints)
+    version_problem = _schema_version_problem(data)
+    if version_problem is not None:
+        problems.append(version_problem)
+    metrics, metric_problems = _per_unit_metric_problems(per_unit_raw)
+    reasons, reason_problems = _reason_problems(reasons_raw, data)
+    problems += metric_problems + reason_problems
+    if problems:
+        _raise_problems(problems)
+    return CostLedger(**data, per_unit_metrics=metrics, not_applicable_reasons=reasons)
 
 
 def ledger_to_dict(ledger: CostLedger) -> dict[str, Any]:

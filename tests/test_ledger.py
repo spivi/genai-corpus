@@ -5,7 +5,10 @@ from typing import Any
 import pytest
 
 from genai_corpus.ledger import (
+    LINE_ITEM_FIELDS,
     NOT_APPLICABLE,
+    ROW_ORDER,
+    SCHEMA_VERSION,
     LedgerValidationError,
     ledger_from_json,
     ledger_to_dict,
@@ -18,10 +21,10 @@ from genai_corpus.ledger import (
 # sentinel and real measurements coexist on one ledger, not just in isolation.
 _VALID_LEDGER: dict[str, Any] = {
     "unit_id": "C5.7",
-    "schema_version": "1.0",
+    "schema_version": SCHEMA_VERSION,
     "measured_at": "2026-08-10T00:00:00+00:00",
     "library_versions": {"python": "3.12.13", "modal": "1.5.3"},
-    "hardware": "A10G",
+    "hardware": "A10",
     "model_name": "llama-3-8b",
     "model_precision": "int8",
     "input_size_bytes": 1024,
@@ -41,34 +44,16 @@ _VALID_LEDGER: dict[str, Any] = {
     "failure_rate": 0.0,
 }
 
-_ALL_NA_OVERRIDES: dict[str, Any] = {
-    "hardware": NOT_APPLICABLE,
-    "model_name": NOT_APPLICABLE,
-    "model_precision": NOT_APPLICABLE,
-    "input_size_bytes": NOT_APPLICABLE,
-    "output_size_bytes": NOT_APPLICABLE,
-    "assets_processed_count": NOT_APPLICABLE,
-    "embedding_or_generation_calls_count": NOT_APPLICABLE,
-    "metered_tokens_count": NOT_APPLICABLE,
-    "gpu_active_seconds": NOT_APPLICABLE,
-    "cpu_active_seconds": NOT_APPLICABLE,
-    "storage_bytes": NOT_APPLICABLE,
-    "egress_bytes": NOT_APPLICABLE,
-    "cache_hit_rate": NOT_APPLICABLE,
-    "cost_per_result_usd": NOT_APPLICABLE,
-    "cost_per_1000_results_usd": NOT_APPLICABLE,
-    "quality_metric_name": NOT_APPLICABLE,
-    "quality_metric_value": NOT_APPLICABLE,
-    "failure_rate": NOT_APPLICABLE,
-}
+_ALL_NA_OVERRIDES: dict[str, Any] = dict.fromkeys(LINE_ITEM_FIELDS, NOT_APPLICABLE)
 
 
 def test_validate_ledger_accepts_a_fully_measured_ledger() -> None:
     ledger = validate_ledger(_VALID_LEDGER)
 
-    assert ledger.hardware == "A10G"
+    assert ledger.hardware == "A10"
     assert ledger.metered_tokens_count == NOT_APPLICABLE
     assert ledger.per_unit_metrics == ()
+    assert ledger.not_applicable_reasons == {}
 
 
 def test_validate_ledger_accepts_not_applicable_on_every_optional_field() -> None:
@@ -78,6 +63,13 @@ def test_validate_ledger_accepts_not_applicable_on_every_optional_field() -> Non
 
     assert ledger.hardware == NOT_APPLICABLE
     assert ledger.failure_rate == NOT_APPLICABLE
+
+
+def test_row_order_covers_exactly_the_mandated_line_items() -> None:
+    """`ROW_ORDER` is the contract's label list, so it may not drift from the fields."""
+    assert len(ROW_ORDER) == 18
+    assert set(LINE_ITEM_FIELDS) < set(_VALID_LEDGER)
+    assert len({label for _, label in ROW_ORDER}) == len(ROW_ORDER)
 
 
 @pytest.mark.parametrize("field_name", sorted(_VALID_LEDGER.keys()))
@@ -122,12 +114,55 @@ def test_validate_ledger_invented_field_raises_naming_it() -> None:
     assert exc_info.value.field == "gpu_seconds"
 
 
+def test_validate_ledger_reports_every_bad_field_not_only_the_first() -> None:
+    """One call, one exception, every fault — not one re-run per mistake."""
+    data = {**_VALID_LEDGER, "hardware": 12, "input_size_bytes": "a lot"}
+    del data["failure_rate"]
+
+    with pytest.raises(LedgerValidationError) as exc_info:
+        validate_ledger(data)
+
+    reported = {name for name, _ in exc_info.value.problems}
+    assert reported == {"failure_rate", "hardware", "input_size_bytes"}
+    assert exc_info.value.field == "failure_rate"  # the first, kept for callers
+    for name in reported:
+        assert name in str(exc_info.value)
+
+
 def test_validate_ledger_int_satisfies_a_float_field() -> None:
     data = {**_VALID_LEDGER, "cost_per_result_usd": 0}
 
     ledger = validate_ledger(data)
 
     assert ledger.cost_per_result_usd == 0
+
+
+def test_validate_ledger_rejects_an_unimplemented_schema_version() -> None:
+    data = {**_VALID_LEDGER, "schema_version": "99.0"}
+
+    with pytest.raises(LedgerValidationError) as exc_info:
+        validate_ledger(data)
+
+    assert exc_info.value.field == "schema_version"
+    assert "unsupported version" in str(exc_info.value)
+
+
+def test_validate_ledger_rejects_a_line_break_in_a_string_field() -> None:
+    data = {**_VALID_LEDGER, "model_name": "llama-3\n| injected | row |"}
+
+    with pytest.raises(LedgerValidationError) as exc_info:
+        validate_ledger(data)
+
+    assert exc_info.value.field == "model_name"
+
+
+def test_validate_ledger_rejects_a_line_break_in_library_versions() -> None:
+    data = {**_VALID_LEDGER, "library_versions": {"python": "3.12\n1.0"}}
+
+    with pytest.raises(LedgerValidationError) as exc_info:
+        validate_ledger(data)
+
+    assert exc_info.value.field == "library_versions"
 
 
 def test_validate_ledger_per_unit_metrics_defaults_to_empty() -> None:
@@ -178,6 +213,82 @@ def test_validate_ledger_per_unit_metrics_not_a_list_raises() -> None:
     assert exc_info.value.field == "per_unit_metrics"
 
 
+def test_validate_ledger_per_unit_metric_may_not_take_a_mandated_rows_label() -> None:
+    """It would shadow that row in the rendered table instead of adding one."""
+    data = {
+        **_VALID_LEDGER,
+        "per_unit_metrics": [{"name": "GPU active time (s)", "value": 0.01, "unit": "s"}],
+    }
+
+    with pytest.raises(LedgerValidationError) as exc_info:
+        validate_ledger(data)
+
+    assert exc_info.value.field == "per_unit_metrics[0]"
+    assert "shadow" in str(exc_info.value)
+
+
+def test_validate_ledger_per_unit_metric_names_must_be_unique() -> None:
+    data = {
+        **_VALID_LEDGER,
+        "per_unit_metrics": [
+            {"name": "x", "value": 1.0, "unit": "u"},
+            {"name": "x", "value": 2.0, "unit": "u"},
+        ],
+    }
+
+    with pytest.raises(LedgerValidationError) as exc_info:
+        validate_ledger(data)
+
+    assert exc_info.value.field == "per_unit_metrics[1]"
+
+
+def test_validate_ledger_accepts_a_reason_for_a_not_applicable_field() -> None:
+    data = {
+        **_VALID_LEDGER,
+        "not_applicable_reasons": {"cpu_active_seconds": "not measured on this run"},
+    }
+
+    ledger = validate_ledger(data)
+
+    assert ledger.not_applicable_reasons["cpu_active_seconds"] == "not measured on this run"
+
+
+def test_validate_ledger_rejects_a_reason_for_a_field_that_was_measured() -> None:
+    data = {**_VALID_LEDGER, "not_applicable_reasons": {"gpu_active_seconds": "not measured"}}
+
+    with pytest.raises(LedgerValidationError) as exc_info:
+        validate_ledger(data)
+
+    assert exc_info.value.field == "not_applicable_reasons[gpu_active_seconds]"
+
+
+def test_validate_ledger_rejects_a_reason_keyed_by_an_unknown_field() -> None:
+    data = {**_VALID_LEDGER, "not_applicable_reasons": {"nonsense": "because"}}
+
+    with pytest.raises(LedgerValidationError) as exc_info:
+        validate_ledger(data)
+
+    assert exc_info.value.field == "not_applicable_reasons[nonsense]"
+
+
+def test_validate_ledger_rejects_an_empty_reason() -> None:
+    data = {**_VALID_LEDGER, "not_applicable_reasons": {"cpu_active_seconds": "   "}}
+
+    with pytest.raises(LedgerValidationError) as exc_info:
+        validate_ledger(data)
+
+    assert exc_info.value.field == "not_applicable_reasons[cpu_active_seconds]"
+
+
+def test_validate_ledger_reasons_not_an_object_raises() -> None:
+    data = {**_VALID_LEDGER, "not_applicable_reasons": ["cpu_active_seconds"]}
+
+    with pytest.raises(LedgerValidationError) as exc_info:
+        validate_ledger(data)
+
+    assert exc_info.value.field == "not_applicable_reasons"
+
+
 def test_ledger_to_dict_round_trips_through_validate_ledger() -> None:
     ledger = validate_ledger(_VALID_LEDGER)
 
@@ -187,7 +298,11 @@ def test_ledger_to_dict_round_trips_through_validate_ledger() -> None:
 
 
 def test_ledger_to_json_round_trips_through_ledger_from_json() -> None:
-    ledger = validate_ledger(_VALID_LEDGER)
+    data = {
+        **_VALID_LEDGER,
+        "not_applicable_reasons": {"cpu_active_seconds": "not measured on this run"},
+    }
+    ledger = validate_ledger(data)
 
     rebuilt = ledger_from_json(ledger_to_json(ledger))
 

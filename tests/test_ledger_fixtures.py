@@ -12,7 +12,9 @@ import json
 import re
 from pathlib import Path
 
-from genai_corpus.ledger import validate_ledger
+import pytest
+
+from genai_corpus.ledger import NOT_APPLICABLE, validate_ledger
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 LEDGER_FIXTURES_DIR = REPO_ROOT / "fixtures" / "ledgers"
@@ -51,3 +53,38 @@ def test_ledger_fixtures_contain_no_credential_shaped_token() -> None:
 def test_ledger_fixtures_are_all_schema_valid() -> None:
     for path in _ledger_fixture_files():
         validate_ledger(json.loads(path.read_text()))
+
+
+def test_ledger_fixture_costs_are_re_derivable_from_their_own_provenance() -> None:
+    """A published dollar figure must be recomputable later, not only re-asserted.
+
+    Every fixture carries the billed seconds and the USD/second rate that priced them,
+    with the rate's vintage in its unit string — so `cost = seconds x rate` is a check
+    a reader can run against the committed file years after the price page changed.
+    """
+    for path in _ledger_fixture_files():
+        ledger = validate_ledger(json.loads(path.read_text()))
+        metrics = {metric.name: metric for metric in ledger.per_unit_metrics}
+        assert "billed_container_seconds" in metrics, f"{path.name}: no billed-seconds row"
+        rate = metrics["hardware_rate_usd_per_second"]
+        assert "verified" in rate.unit, f"{path.name}: rate row states no verification date"
+        expected = metrics["billed_container_seconds"].value * rate.value
+        assert ledger.cost_per_result_usd == pytest.approx(expected)
+
+
+def test_ledger_fixtures_never_publish_an_unexplained_cpu_active_time_na() -> None:
+    """Every Modal container has CPU cores and is billed for them, so a bare `n/a`
+    on `cpu_active_seconds` claims something false.
+
+    The harness times billed container span, not in-container compute; recording that
+    span under `cpu_active_seconds` was the SPZ-44 review's P1. A committed fixture
+    either carries a real active-time measurement or says why it does not.
+    """
+    for path in _ledger_fixture_files():
+        ledger = validate_ledger(json.loads(path.read_text()))
+        lanes = ["cpu_active_seconds"]
+        if ledger.hardware not in (NOT_APPLICABLE, "CPU"):
+            lanes.append("gpu_active_seconds")
+        for name in lanes:
+            if getattr(ledger, name) == NOT_APPLICABLE:
+                assert name in ledger.not_applicable_reasons, f"{path.name}: {name} unexplained"

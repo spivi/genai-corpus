@@ -4,42 +4,51 @@ This is what makes "generated, never hand-typed" true rather than aspirational: 
 article's cost table is `render_ledger_markdown_table`'s output, verbatim. Risk 8 in
 the M4 plan names ledger drift between article and repo as a threat to the reader —
 generation from one schema, with a round-trip test proving it, is the mitigation.
+
+Two properties this module owes a public article. Cell values are **escaped**: a
+`|` inside a model name or unit would otherwise open a third column against a
+two-column header, so it is written `\\|` here and unescaped by the parser (line
+breaks never reach this point — `validate_ledger` rejects them). And an `n/a` that
+carries a `not_applicable_reasons` entry is published *with* its reason, so a reader
+sees the difference between "this unit has no GPU" and "this run did not measure it".
 """
 
 from __future__ import annotations
 
-from genai_corpus.ledger import NOT_APPLICABLE, CostLedger
-
-# (field name, published label) — order follows the PRD's twelve mandated items.
-_ROW_ORDER: tuple[tuple[str, str], ...] = (
-    ("hardware", "Hardware"),
-    ("model_name", "Model"),
-    ("model_precision", "Precision"),
-    ("input_size_bytes", "Input size (bytes)"),
-    ("output_size_bytes", "Output size (bytes)"),
-    ("assets_processed_count", "Assets processed (count)"),
-    ("embedding_or_generation_calls_count", "Embedding/generation calls (count)"),
-    ("metered_tokens_count", "Metered tokens (count)"),
-    ("gpu_active_seconds", "GPU active time (s)"),
-    ("cpu_active_seconds", "CPU active time (s)"),
-    ("storage_bytes", "Storage (bytes)"),
-    ("egress_bytes", "Egress (bytes)"),
-    ("cache_hit_rate", "Cache-hit rate"),
-    ("cost_per_result_usd", "Cost per result (USD)"),
-    ("cost_per_1000_results_usd", "Cost per 1,000 results (USD)"),
-    ("quality_metric_name", "Quality metric"),
-    ("quality_metric_value", "Quality metric value"),
-    ("failure_rate", "Failure rate"),
-)
+from genai_corpus.ledger import NOT_APPLICABLE, ROW_ORDER, CostLedger
 
 _HEADER = ("| Metric | Value |", "| --- | --- |")
+_NA_TEXT = "n/a"
+_REASON_SEPARATOR = " — "
 
 
-def _format_value(value: object) -> str:
-    """`n/a` for the not-applicable sentinel; the plain string form otherwise."""
+def _escape_cell(text: str) -> str:
+    """Make `text` safe to sit inside one markdown cell."""
+    return text.replace("\\", "\\\\").replace("|", "\\|")
+
+
+def _unescape_cell(text: str) -> str:
+    """The inverse of `_escape_cell`, so a parsed cell equals the value rendered."""
+    out: list[str] = []
+    escaped = False
+    for char in text:
+        if escaped:
+            out.append(char)
+            escaped = False
+        elif char == "\\":
+            escaped = True
+        else:
+            out.append(char)
+    return "".join(out)
+
+
+def _format_value(value: object, reason: str | None = None) -> str:
+    """`n/a` (with its stated reason, if any) for the sentinel; the escaped form else."""
     if value == NOT_APPLICABLE:
-        return "n/a"
-    return str(value)
+        rendered = _NA_TEXT if reason is None else f"{_NA_TEXT}{_REASON_SEPARATOR}{reason}"
+    else:
+        rendered = str(value)
+    return _escape_cell(rendered)
 
 
 def render_ledger_markdown_table(ledger: CostLedger) -> str:
@@ -49,11 +58,36 @@ def render_ledger_markdown_table(ledger: CostLedger) -> str:
     attached are appended after them, unmodified.
     """
     lines = list(_HEADER)
-    for field_name, label in _ROW_ORDER:
-        lines.append(f"| {label} | {_format_value(getattr(ledger, field_name))} |")
+    for field_name, label in ROW_ORDER:
+        value = _format_value(
+            getattr(ledger, field_name), ledger.not_applicable_reasons.get(field_name)
+        )
+        lines.append(f"| {_escape_cell(label)} | {value} |")
     for metric in ledger.per_unit_metrics:
-        lines.append(f"| {metric.name} | {metric.value} {metric.unit} |")
+        value = _escape_cell(f"{metric.value} {metric.unit}")
+        lines.append(f"| {_escape_cell(metric.name)} | {value} |")
     return "\n".join(lines)
+
+
+def _split_row(line: str) -> list[str]:
+    """Split a table row on its unescaped pipes only."""
+    cells: list[str] = []
+    current: list[str] = []
+    escaped = False
+    for char in line:
+        if escaped:
+            current.append(char)
+            escaped = False
+        elif char == "\\":
+            current.append(char)
+            escaped = True
+        elif char == "|":
+            cells.append("".join(current))
+            current = []
+        else:
+            current.append(char)
+    cells.append("".join(current))
+    return cells
 
 
 def parse_ledger_markdown_table(table: str) -> dict[str, str]:
@@ -61,11 +95,14 @@ def parse_ledger_markdown_table(table: str) -> dict[str, str]:
 
     Exists so a round-trip test can prove the table it reads back says exactly what
     the ledger it was built from says, not just that the renderer ran without error.
+    Escaping is undone, so a parsed cell equals the string that was rendered into it.
     """
     rows: dict[str, str] = {}
     for line in table.splitlines()[len(_HEADER) :]:
         if not line.startswith("|"):
             continue
-        label, _, value = line.strip("|").partition("|")
-        rows[label.strip()] = value.strip()
+        cells = _split_row(line.strip())
+        if len(cells) < 4:
+            continue
+        rows[_unescape_cell(cells[1]).strip()] = _unescape_cell(cells[2]).strip()
     return rows
