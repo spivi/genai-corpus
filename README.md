@@ -95,12 +95,13 @@ Modal's published **full-core** CPU rate of $0.0000131/s. That is not what the r
 charged. `cpu_probe` is a bare `@app.function()`, so it takes Modal's documented
 default request of **0.125 cores and 128 MiB**, and Modal bills `max(request, actual)`:
 
-| | |
-| --- | --- |
-| 0.125 core-seconds × 3.4247 s × $0.0000131 | $0.0000056 |
-| 0.125 GiB × 3.4247 s × $0.00000222 | $0.0000010 |
-| **actual charge** | **≈ $0.0000066** |
-| published figure | $0.0000449 — **about 6.8× the actual charge** |
+| Billed for | Arithmetic | USD |
+| --- | --- | --- |
+| cores | 0.125 cores × 3.4247 s × $0.0000131/core-s | $0.0000056 |
+| memory | 0.125 GiB × 3.4247 s × $0.00000222/GiB-s | $0.0000010 |
+| **actual charge** | | **≈ $0.0000066** |
+| published figure | 1 core × 3.4247 s × $0.0000131/core-s | $0.0000449 |
+| | | **about 6.8× the actual charge** |
 
 So the published number is an upper bound, and a large one, not a rounding caveat.
 Both factors of the correction are in the committed ledger — `cpu_request_cores` and
