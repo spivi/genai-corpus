@@ -15,6 +15,7 @@ from genai_corpus.ledger import (
     ledger_to_json,
     validate_ledger,
 )
+from genai_corpus.ledger_table import parse_ledger_markdown_table
 
 # A fully-measured ledger: every field concrete except the three that a unit with no
 # metered API and no quality eval would legitimately mark not-applicable — proving the
@@ -154,6 +155,57 @@ def test_validate_ledger_rejects_a_line_break_in_a_string_field() -> None:
         validate_ledger(data)
 
     assert exc_info.value.field == "model_name"
+
+
+#: Every character `str.splitlines()` breaks on beyond `\r` and `\n`. The parser in
+#: `ledger_table` splits with `str.splitlines()`, so a value carrying one of these
+#: passed the old `[\r\n]` validator and then vanished from the parsed table — the row
+#: was absent rather than mismatched, which no comparison would ever report.
+_EXTRA_SPLITLINES_CHARS = (
+    "\v",
+    "\f",
+    "\x1c",
+    "\x1d",
+    "\x1e",
+    "\x85",
+    "\u2028",
+    "\u2029",
+)
+
+
+@pytest.mark.parametrize("char", _EXTRA_SPLITLINES_CHARS)
+def test_validate_ledger_rejects_every_character_splitlines_breaks_on(char: str) -> None:
+    data = {**_VALID_LEDGER, "model_name": f"llama{char}3"}
+
+    with pytest.raises(LedgerValidationError) as exc_info:
+        validate_ledger(data)
+
+    assert exc_info.value.field == "model_name"
+
+
+@pytest.mark.parametrize("char", _EXTRA_SPLITLINES_CHARS)
+def test_validate_ledger_rejects_those_characters_in_a_per_unit_metric_name(char: str) -> None:
+    data = {
+        **_VALID_LEDGER,
+        "per_unit_metrics": [{"name": f"a{char}b", "value": 1.0, "unit": "x"}],
+    }
+
+    with pytest.raises(LedgerValidationError) as exc_info:
+        validate_ledger(data)
+
+    assert exc_info.value.field == "per_unit_metrics[0]"
+
+
+@pytest.mark.parametrize("char", _EXTRA_SPLITLINES_CHARS)
+def test_a_rejected_character_really_would_have_dropped_the_row(char: str) -> None:
+    """Why the class had to widen, stated as an executable fact rather than a comment.
+
+    Renders the value the validator now refuses and shows the parser losing the Model
+    row entirely — the failure mode is a silently absent row, not a wrong one.
+    """
+    table = f"| Metric | Value |\n| --- | --- |\n| Model | llama{char}3 |\n"
+
+    assert "Model" not in parse_ledger_markdown_table(table)
 
 
 def test_validate_ledger_rejects_a_line_break_in_library_versions() -> None:

@@ -84,7 +84,16 @@ _NUMBER_TYPES: Final = (int, float)
 _UNION_ORIGINS: Final = (typing.Union, types.UnionType)
 # A ledger value is one table cell. A newline does not escape in markdown; it ends the
 # row, so a multi-line value silently truncates the published table rather than wrap.
-_LINE_BREAK = re.compile(r"[\r\n]")
+#
+# The class is every character `str.splitlines()` breaks on, not just `\r` and `\n`,
+# because `ledger_table.parse_ledger_markdown_table` splits with `str.splitlines()`:
+# a narrower validator would pass a value the parser then treats as two lines, and the
+# row would vanish from the parsed table instead of failing a comparison. Verified:
+# `model_name="\x85nel"` passed the old `[\r\n]` class and made the Model row
+# disappear on the way back out.
+# Written with escapes rather than the characters themselves: six of the ten are
+# invisible in an editor, and a class you cannot see is a class nobody can review.
+_LINE_BREAK = re.compile("[\r\n\v\f\x1c\x1d\x1e\x85\u2028\u2029]")
 _LINE_BREAK_PROBLEM: Final = "must not contain a line break: a ledger value is one table cell"
 
 
