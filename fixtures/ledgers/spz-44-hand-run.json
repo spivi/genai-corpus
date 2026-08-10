@@ -1,0 +1,29 @@
+{
+  "unit_id": "SPZ-44-hand-run",
+  "schema_version": "1.0",
+  "measured_at": "2026-08-10T05:09:02.388645+00:00",
+  "library_versions": {
+    "python": "3.12.13",
+    "modal": "1.5.3",
+    "genai_corpus": "0.1.0"
+  },
+  "hardware": "CPU",
+  "model_name": "not_applicable",
+  "model_precision": "not_applicable",
+  "input_size_bytes": 7,
+  "output_size_bytes": 12,
+  "assets_processed_count": 1,
+  "embedding_or_generation_calls_count": "not_applicable",
+  "metered_tokens_count": "not_applicable",
+  "gpu_active_seconds": "not_applicable",
+  "cpu_active_seconds": 3.547689375001937,
+  "storage_bytes": "not_applicable",
+  "egress_bytes": "not_applicable",
+  "cache_hit_rate": "not_applicable",
+  "cost_per_result_usd": 4.647473081252537e-05,
+  "cost_per_1000_results_usd": 0.04647473081252537,
+  "quality_metric_name": "not_applicable",
+  "quality_metric_value": "not_applicable",
+  "failure_rate": 0.0,
+  "per_unit_metrics": []
+}
