@@ -255,6 +255,8 @@ def ledger_from_measurement(
     schema reads as *this unit has no such thing*. If your unit **has** one but did not
     measure it, say so: pass `not_applicable_reasons={"field": "why"}`.
     """
+    if results < 1:
+        raise ValueError(f"results must be at least 1, got {results}")
     caller_reasons = dict(fields.pop("not_applicable_reasons", {}))
     caller_metrics = list(fields.pop("per_unit_metrics", []))
     cost_per_result = measurement.cost_usd / results

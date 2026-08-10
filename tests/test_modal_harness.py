@@ -253,6 +253,13 @@ def test_ledger_from_measurement_divides_cost_across_the_runs_results() -> None:
     assert ledger.cost_per_1000_results_usd == pytest.approx(measurement.cost_usd / 4 * 1000)
 
 
+def test_ledger_from_measurement_rejects_a_result_count_below_one() -> None:
+    measurement = run_and_measure(lambda: 1, hardware=CPU_HARDWARE)
+
+    with pytest.raises(ValueError, match="results must be at least 1"):
+        ledger_from_measurement(measurement, unit_id="T-1", results=0)
+
+
 def test_ledger_from_measurement_lets_the_caller_supply_measured_active_time() -> None:
     measurement = run_and_measure(lambda: 1, hardware=CPU_HARDWARE)
 
