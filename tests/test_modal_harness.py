@@ -123,9 +123,13 @@ def test_resolve_hardware_rate_prices_a_multi_gpu_spec_by_its_count() -> None:
     )
 
 
-def test_resolve_hardware_rate_rejects_a_malformed_gpu_count() -> None:
+@pytest.mark.parametrize("spec", ["H100:many", "H100:0", "H100:-2", "H100:", "H100:1.5"])
+def test_resolve_hardware_rate_rejects_a_malformed_gpu_count(spec: str) -> None:
+    """`"H100:"` belongs in this list. It used to price as one GPU: the branch tested
+    the count text, and an empty string is falsy, so a truncated spec silently became
+    the single-GPU rate while every other malformed count was rejected."""
     with pytest.raises(ValueError, match="bad GPU count"):
-        resolve_hardware_rate("H100:many")
+        resolve_hardware_rate(spec)
 
 
 def test_weights_volume_mount_path_is_an_absolute_container_path() -> None:
@@ -295,6 +299,26 @@ def test_ledger_from_measurement_emits_a_schema_valid_ledger() -> None:
     assert ledger.unit_id == "T-1"
     assert ledger.hardware == CPU_HARDWARE
     assert ledger.library_versions["genai_corpus"]
+
+
+def test_ledger_from_measurement_refuses_a_hardware_that_contradicts_the_measurement() -> None:
+    """`**fields` used to win outright, so `hardware="H100"` on a CPU measurement
+    published a GPU ledger priced at the CPU rate — and, because the lane logic reads
+    the same field, one whose GPU lane claimed it was measured and simply missing."""
+    measurement = run_and_measure(lambda: 1, hardware=CPU_HARDWARE)
+
+    with pytest.raises(ValueError, match="contradicts the measurement"):
+        ledger_from_measurement(measurement, unit_id="T-1", hardware="H100")
+
+
+def test_ledger_from_measurement_accepts_a_hardware_that_restates_the_measurement() -> None:
+    """Refusing agreement would be noise: what is refused is disagreement."""
+    measurement = run_and_measure(lambda: 1, hardware=CPU_HARDWARE)
+
+    ledger = ledger_from_measurement(measurement, unit_id="T-1", hardware=CPU_HARDWARE)
+
+    assert ledger.hardware == CPU_HARDWARE
+    assert "gpu_active_seconds" not in ledger.not_applicable_reasons
 
 
 def test_ledger_from_measurement_rejects_a_bad_caller_field_rather_than_emitting_it() -> None:

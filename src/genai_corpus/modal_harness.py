@@ -67,6 +67,13 @@ CPU_HARDWARE: Final = "CPU"
 # "CPU" prices one *full physical core*-second. Modal bills a container for the cores
 # it actually requests (minimum 0.125) plus memory GiB-seconds, so a CPU figure priced
 # from this key is an upper bound unless the container asks for a whole core.
+#
+# Deliberately omitted: **RTX PRO 6000**, published at $0.000842/s. Its `gpu=` spec
+# string was not verified, and every key in this table is one Modal itself emits so
+# `hardware_from_function` can match it; a guessed key is reachable only by a
+# hand-typed label, which is the failure mode this table exists to prevent. Recorded
+# here so the next person does not redo the lookup and reach the opposite conclusion:
+# add it when the spec string is confirmed against Modal's docs, not before.
 HARDWARE_RATE_USD_PER_SECOND: Final[dict[str, float]] = {
     CPU_HARDWARE: 0.0000131,
     "T4": 0.000164,
@@ -120,12 +127,17 @@ def resolve_hardware_rate(hardware: str) -> float:
 
     Raises rather than defaulting: an unknown key priced at zero would publish a run
     as free, which is the one failure mode a cost ledger must not have.
+
+    The branch is on the *separator*, not on the count text. Keying off `count_text`
+    made `"H100:"` fall through to the single-GPU rate — an empty string is falsy —
+    while `"H100:0"`, `"H100:-2"` and `"H100:many"` were all correctly rejected. A
+    malformed spec is malformed whether or not it happens to be empty.
     """
-    key, _, count_text = hardware.partition(":")
+    key, separator, count_text = hardware.partition(":")
     if key not in HARDWARE_RATE_USD_PER_SECOND:
         raise ValueError(f"unknown hardware '{hardware}': add its rate before using it")
     count = 1
-    if count_text:
+    if separator:
         if not count_text.isdigit() or int(count_text) < 1:
             raise ValueError(f"bad GPU count in hardware '{hardware}': expected '<name>:<n>'")
         count = int(count_text)
@@ -251,12 +263,22 @@ def ledger_from_measurement(
     item you pass in `fields` wins, including `per_unit_metrics` rows, which are
     appended to the provenance rows rather than replacing them.
 
+    `hardware` is the one line item `fields` may not disagree with. It is what priced
+    the run, and it also decides which active-time lane gets a stated reason, so a
+    ledger whose hardware and rate came from different machines would misdescribe both
+    its cost and its GPU lane — silently, and in the published table.
+
     A line item you do not pass is recorded as a silent `not_applicable`, which this
     schema reads as *this unit has no such thing*. If your unit **has** one but did not
     measure it, say so: pass `not_applicable_reasons={"field": "why"}`.
     """
     if results < 1:
         raise ValueError(f"results must be at least 1, got {results}")
+    if fields.get("hardware", measurement.hardware) != measurement.hardware:
+        raise ValueError(
+            f"hardware '{fields['hardware']}' contradicts the measurement's "
+            f"'{measurement.hardware}', which is what priced this run"
+        )
     caller_reasons = dict(fields.pop("not_applicable_reasons", {}))
     caller_metrics = list(fields.pop("per_unit_metrics", []))
     cost_per_result = measurement.cost_usd / results
