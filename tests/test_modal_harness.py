@@ -16,13 +16,18 @@ import pytest
 from genai_corpus.ledger import NOT_APPLICABLE, LedgerValidationError
 from genai_corpus.modal_harness import (
     CPU_HARDWARE,
+    DEFAULT_CPU_REQUEST_CORES,
+    DEFAULT_MEMORY_REQUEST_MIB,
     HARDWARE_RATE_USD_PER_SECOND,
+    MEMORY_RATE_USD_PER_GIB_SECOND,
     RATE_TABLE_MAX_AGE_DAYS,
     RATE_TABLE_VERIFIED_ON,
     WEIGHTS_VOLUME_MOUNT_PATH,
     WEIGHTS_VOLUME_NAME,
     HardwareMismatchError,
     capture_library_versions,
+    container_request,
+    container_request_metrics,
     hardware_from_function,
     ledger_from_measurement,
     rate_table_age_days,
@@ -46,6 +51,16 @@ def _one_h100() -> int:
 
 @_probe_app.function(gpu="H100:2")
 def _two_h100() -> int:
+    return 1
+
+
+@_probe_app.function(cpu=2.0, memory=4096)
+def _explicit_request() -> int:
+    return 1
+
+
+@_probe_app.function(cpu=(1.0, 4.0), memory=(512, 2048))
+def _request_and_limit() -> int:
     return 1
 
 
@@ -130,6 +145,40 @@ def test_resolve_hardware_rate_rejects_a_malformed_gpu_count(spec: str) -> None:
     the single-GPU rate while every other malformed count was rejected."""
     with pytest.raises(ValueError, match="bad GPU count"):
         resolve_hardware_rate(spec)
+
+
+def test_container_request_falls_back_to_modals_documented_defaults() -> None:
+    """A bare `@app.function()` requests 0.125 cores and 128 MiB, and is billed for
+    that — not for the full core `HARDWARE_RATE_USD_PER_SECOND["CPU"]` prices."""
+    assert container_request(_cpu_only) == (DEFAULT_CPU_REQUEST_CORES, DEFAULT_MEMORY_REQUEST_MIB)
+
+
+def test_container_request_reads_an_explicit_cpu_and_memory_request() -> None:
+    assert container_request(_explicit_request) == (2.0, 4096.0)
+
+
+def test_container_request_takes_the_request_half_of_a_request_limit_pair() -> None:
+    """`cpu=(request, limit)` is billed from the request: the limit is a ceiling."""
+    assert container_request(_request_and_limit) == (1.0, 512.0)
+
+
+def test_container_request_metrics_are_ledger_shaped_provenance_rows() -> None:
+    metrics = container_request_metrics(_cpu_only)
+
+    assert [metric["name"] for metric in metrics] == ["cpu_request_cores", "memory_request_mib"]
+    assert [metric["unit"] for metric in metrics] == ["cores", "MiB"]
+    assert metrics[0]["value"] == DEFAULT_CPU_REQUEST_CORES
+
+
+def test_memory_rate_is_recorded_but_not_folded_into_the_cost() -> None:
+    """`cost_usd` is core-seconds only. The memory rate is published so the other half
+    of a real bill is checkable, not so it can be silently added in."""
+    measurement = run_and_measure(lambda: 1, hardware=CPU_HARDWARE)
+
+    assert MEMORY_RATE_USD_PER_GIB_SECOND > 0
+    assert measurement.cost_usd == pytest.approx(
+        measurement.billed_container_seconds * measurement.rate_usd_per_second
+    )
 
 
 def test_weights_volume_mount_path_is_an_absolute_container_path() -> None:

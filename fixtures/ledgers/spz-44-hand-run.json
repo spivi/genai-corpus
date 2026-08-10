@@ -35,6 +35,16 @@
       "name": "hardware_rate_usd_per_second",
       "value": 1.31e-05,
       "unit": "USD/s (modal.com/pricing, verified 2026-08-10)"
+    },
+    {
+      "name": "cpu_request_cores",
+      "value": 0.125,
+      "unit": "cores"
+    },
+    {
+      "name": "memory_request_mib",
+      "value": 128.0,
+      "unit": "MiB"
     }
   ],
   "not_applicable_reasons": {

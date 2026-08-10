@@ -62,6 +62,13 @@ ledger carries the USD/second rate that priced it and the date that rate was ver
 so a published figure is re-derivable rather than only re-assertable; the test suite
 fails once `RATE_TABLE_VERIFIED_ON` is more than `RATE_TABLE_MAX_AGE_DAYS` old.
 
+`container_request_metrics(fn)` is the other half of that provenance: the cores and MiB
+the container **requested**, read off the decorated Function (Modal's documented
+defaults when it names neither). Modal bills `max(request, actual)`, so without it a
+reader cannot tell a full-core charge from a one-eighth-core one — see *What that
+hand-run actually cost* below, where the gap is 6.8×. Pass it as `per_unit_metrics=`;
+every committed ledger fixture is required to carry both rows.
+
 `capture_library_versions(extra=None)` reports the interpreter/package versions a run
 used, for the ledger's `library_versions` field (M4 plan Risk 4: a dated claim about
 what ran is reproducible fact only if the versions are pinned and recorded, not
@@ -81,14 +88,34 @@ never invoked by CI or any test — `modal` is a pinned dependency (vetted throu
 provenance confirmed) so the package imports cleanly with no credential, but no
 automated path in this repo ever calls Modal, so no automated trigger can spend money.
 
-That hand-run cost **$0.0000449**: 3.42 billed container-seconds at Modal's published
-full-core CPU rate of $0.0000131/s. Both numbers are in the committed ledger, so the
-multiplication is one a reader can check. It is *not* a CPU-active-time figure — the
-probe's actual work, `sum(range(1_000_000))`, takes about **0.015 s** locally, so over
-99% of the billed span is container start-up and the RPC round trip. Read it as what
-Modal bills, and as an upper bound at that: a container that requests a fraction of a
-core (the minimum is 0.125) is billed that fraction, plus memory GiB-seconds this rate
-table does not model.
+### What that hand-run actually cost
+
+The committed ledger publishes **$0.0000449** — 3.4247 billed container-seconds at
+Modal's published **full-core** CPU rate of $0.0000131/s. That is not what the run was
+charged. `cpu_probe` is a bare `@app.function()`, so it takes Modal's documented
+default request of **0.125 cores and 128 MiB**, and Modal bills `max(request, actual)`:
+
+| | |
+| --- | --- |
+| 0.125 core-seconds × 3.4247 s × $0.0000131 | $0.0000056 |
+| 0.125 GiB × 3.4247 s × $0.00000222 | $0.0000010 |
+| **actual charge** | **≈ $0.0000066** |
+| published figure | $0.0000449 — **about 6.8× the actual charge** |
+
+So the published number is an upper bound, and a large one, not a rounding caveat.
+Both factors of the correction are in the committed ledger — `cpu_request_cores` and
+`memory_request_mib` beside `billed_container_seconds` and the rate — so it is
+re-derivable from the file, not only from this paragraph.
+
+Do **not** read the figure as validated by reproducing `3.4247 × 0.0000131`. That
+arithmetic is exact and reproduces the ledger bit-for-bit; what is wrong is its
+premise — one whole core, for a container that asked for an eighth of one. The harness
+prices core-seconds only and does not model memory or fractional requests; correcting
+that is a change to the cost model, not to this run's measurement.
+
+It is also *not* a CPU-active-time figure: the probe's actual work,
+`sum(range(1_000_000))`, takes about **0.015 s** locally, so over 99% of the billed
+span is container start-up and the RPC round trip.
 
 ## Install
 

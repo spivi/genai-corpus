@@ -65,8 +65,10 @@ CPU_HARDWARE: Final = "CPU"
 # prices one full GPU-second; a `"H100:2"`-style spec is priced at its count.
 #
 # "CPU" prices one *full physical core*-second. Modal bills a container for the cores
-# it actually requests (minimum 0.125) plus memory GiB-seconds, so a CPU figure priced
-# from this key is an upper bound unless the container asks for a whole core.
+# it actually requests (minimum 0.125, and 0.125 is also the default) plus memory
+# GiB-seconds at MEMORY_RATE_USD_PER_GIB_SECOND, so a CPU figure priced from this key
+# is an upper bound — a large one — unless the container asks for a whole core. See
+# `container_request_metrics`, which records what a container actually asked for.
 #
 # Deliberately omitted: **RTX PRO 6000**, published at $0.000842/s. Its `gpu=` spec
 # string was not verified, and every key in this table is one Modal itself emits so
@@ -87,6 +89,19 @@ HARDWARE_RATE_USD_PER_SECOND: Final[dict[str, float]] = {
     "B200": 0.001736,
     "B300": 0.001972,
 }
+
+#: USD per GiB-second of requested memory, billed on top of the core rate above.
+#: Source: https://modal.com/pricing, verified RATE_TABLE_VERIFIED_ON. Nothing in this
+#: module prices with it yet — `cost_usd` is core-seconds only — so it is here to make
+#: the memory half of a bill *checkable* rather than to quietly fold it in.
+MEMORY_RATE_USD_PER_GIB_SECOND: Final[float] = 0.00000222
+
+#: Modal's documented default resource *request* for a Function that names neither
+#: `cpu=` nor `memory=`, from https://modal.com/docs/guide/resources (verified
+#: RATE_TABLE_VERIFIED_ON). Billing is `max(request, actual)`, so a bare
+#: `@app.function()` is billed for these, not for a whole core.
+DEFAULT_CPU_REQUEST_CORES: Final[float] = 0.125
+DEFAULT_MEMORY_REQUEST_MIB: Final[float] = 128.0
 
 #: The day the table above was last checked against modal.com/pricing, in full.
 RATE_TABLE_VERIFIED_ON: Final[date] = date(2026, 8, 10)
@@ -164,6 +179,51 @@ def hardware_from_function(function: modal.Function) -> str:
             f"heterogeneous gpu spec {gpus!r} has no single rate; name hardware explicitly"
         )
     return gpus
+
+
+def _requested(spec_value: object, default: float) -> float:
+    """One resource request: the request half of a `(request, limit)` pair, or the
+    documented default when the Function names none."""
+    if spec_value is None:
+        return default
+    if isinstance(spec_value, tuple):
+        return float(spec_value[0])
+    return float(spec_value)
+
+
+def container_request(function: modal.Function) -> tuple[float, float]:
+    """The cores and MiB `function`'s container requests — derived, not assumed.
+
+    Modal bills `max(request, actual)` for both, so the request is what a bare
+    `@app.function()` is charged for: pricing such a run at one full core overstates
+    it about eightfold. `cpu=`/`memory=` accept a `(request, limit)` pair, in which
+    case the request is the billed floor; unset means Modal's documented default.
+    """
+    spec = getattr(function, "spec", None)
+    if spec is None or not hasattr(spec, "cpu") or not hasattr(spec, "memory"):
+        raise HardwareMismatchError(
+            "this modal version does not expose Function.spec.cpu/.memory; "
+            "record the container's request explicitly"
+        )
+    return (
+        _requested(spec.cpu, DEFAULT_CPU_REQUEST_CORES),
+        _requested(spec.memory, DEFAULT_MEMORY_REQUEST_MIB),
+    )
+
+
+def container_request_metrics(function: modal.Function) -> list[dict[str, Any]]:
+    """`container_request` as ledger rows, so a published cost stays correctable.
+
+    The rate a run was priced at is already ledger provenance; what the container
+    *asked for* is the other half of the same arithmetic, and without it a reader
+    cannot tell a full-core charge from a one-eighth-core one. Pass the result as
+    `per_unit_metrics=` to `ledger_from_measurement`.
+    """
+    cores, memory_mib = container_request(function)
+    return [
+        {"name": "cpu_request_cores", "value": cores, "unit": "cores"},
+        {"name": "memory_request_mib", "value": memory_mib, "unit": "MiB"},
+    ]
 
 
 def run_and_measure[T](

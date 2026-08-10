@@ -27,6 +27,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 from genai_corpus.ledger import ledger_to_json  # noqa: E402
 from genai_corpus.modal_harness import (  # noqa: E402
     app,
+    container_request_metrics,
     cpu_probe,
     hardware_from_function,
     ledger_from_measurement,
@@ -58,6 +59,11 @@ def main() -> None:
         # One observed call, zero failures. A rate over a sample of one, stated as
         # such rather than dressed up: it is the only failure evidence this run has.
         failure_rate=0.0,
+        # `cpu_probe` names no `cpu=`/`memory=`, so it takes Modal's documented
+        # default request and is billed for that, not for the whole core the rate
+        # table prices. Recorded as ledger rows, read off the decorated Function, so
+        # the published figure stays correctable from the ledger alone.
+        per_unit_metrics=container_request_metrics(cpu_probe),
     )
 
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)

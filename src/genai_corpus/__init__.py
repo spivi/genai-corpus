@@ -30,7 +30,10 @@ from genai_corpus.ledger import (
 from genai_corpus.ledger_table import parse_ledger_markdown_table, render_ledger_markdown_table
 from genai_corpus.modal_harness import (
     CPU_HARDWARE,
+    DEFAULT_CPU_REQUEST_CORES,
+    DEFAULT_MEMORY_REQUEST_MIB,
     HARDWARE_RATE_USD_PER_SECOND,
+    MEMORY_RATE_USD_PER_GIB_SECOND,
     RATE_TABLE_MAX_AGE_DAYS,
     RATE_TABLE_VERIFIED_ON,
     WEIGHTS_VOLUME_MOUNT_PATH,
@@ -38,6 +41,8 @@ from genai_corpus.modal_harness import (
     HardwareMismatchError,
     RunMeasurement,
     capture_library_versions,
+    container_request,
+    container_request_metrics,
     hardware_from_function,
     ledger_from_measurement,
     rate_table_age_days,
@@ -48,8 +53,11 @@ from genai_corpus.modal_harness import (
 
 __all__ = [
     "CPU_HARDWARE",
+    "DEFAULT_CPU_REQUEST_CORES",
+    "DEFAULT_MEMORY_REQUEST_MIB",
     "HARDWARE_RATE_USD_PER_SECOND",
     "LINE_ITEM_FIELDS",
+    "MEMORY_RATE_USD_PER_GIB_SECOND",
     "NOT_APPLICABLE",
     "RATE_TABLE_MAX_AGE_DAYS",
     "RATE_TABLE_VERIFIED_ON",
@@ -68,6 +76,8 @@ __all__ = [
     "RunMeasurement",
     "__version__",
     "capture_library_versions",
+    "container_request",
+    "container_request_metrics",
     "hardware_from_function",
     "ledger_from_json",
     "ledger_from_measurement",
