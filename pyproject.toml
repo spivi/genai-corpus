@@ -1,6 +1,9 @@
 [project]
 name = "genai-corpus"
-version = "0.1.0"
+# Read from src/genai_corpus/_version.py, never restated here. `__version__` is a
+# published ledger field (SPZ-44), so two unsynced copies of it would eventually mean
+# a committed ledger claiming a version that was never released.
+dynamic = ["version"]
 description = "Shared corpus loaders and cost-ledger schema for the Generative AI Engineering series"
 readme = "README.md"
 license = { text = "MIT" }
@@ -28,6 +31,9 @@ dev = [
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "src/genai_corpus/_version.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/genai_corpus"]
