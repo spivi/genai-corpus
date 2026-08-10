@@ -8,7 +8,14 @@ authors = [{ name = "Alex Spivakovsky", email = "alex.spivakovsky@gmail.com" }]
 # Pinned, not a floor: the series' units measure and publish cost numbers against one
 # interpreter. Widen only with a deliberate re-verification across every unit repo.
 requires-python = "==3.12.*"
-dependencies = []
+dependencies = [
+    # Exact pin, not a range: this is a runtime dependency the harness's cost numbers
+    # depend on (SPZ-44), vetted through /dependency-guard (ALLOW; modal-labs/modal-client
+    # provenance confirmed via PyPI metadata, no OSV advisories, no typosquat match).
+    # Importing it needs no credential — only an actual Modal call does, and CI never
+    # makes one. Bump deliberately, re-running the gate, not by tracking a range.
+    "modal==1.5.3",
+]
 
 [project.optional-dependencies]
 dev = [

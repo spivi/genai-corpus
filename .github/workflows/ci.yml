@@ -1,8 +1,10 @@
 name: CI
 
 # CPU only, and needs no credential: everything below runs against the committed
-# fixture corpus in fixtures/corpus/. SPZ-44 is the first ticket in this series to add
-# a repository secret (Modal/Hugging Face); this workflow deliberately has none.
+# fixture corpus in fixtures/corpus/. SPZ-44 adds `modal` as a pinned dependency and a
+# schema/harness test suite, but no test calls Modal — the package imports without a
+# credential, and the one live Modal call this repo makes runs by hand
+# (scripts/hand_run_spz44.py), never in CI. This workflow deliberately has no secret.
 #
 # pull_request is included (not just push) so a fork PR gets a real CI run instead of
 # a green badge that never ran anything — relevant once this repo is public.
