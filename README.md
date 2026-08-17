@@ -24,7 +24,11 @@ cache-hit rate, cost per result and per 1,000, quality metric, failure rate) bec
 eighteen typed fields, because several items are inherently a pair of measurements. Every
 field is required to be *explicit*: a measured value, or the `NOT_APPLICABLE`
 sentinel, and never a bare zero standing in for "didn't measure this." `per_unit_metrics`
-is the escape hatch for anything unit-specific, addable without editing the schema.
+is the extension point for anything unit-specific, addable without editing the schema.
+Two of its rows are not optional, though, and calling the whole thing an escape hatch
+would hide that: `cpu_request_cores` and `memory_request_mib` are required in every
+committed ledger, because the billed-dollar fields cannot be read without them. See
+`container_request_metrics` below.
 
 `NOT_APPLICABLE` carries exactly two meanings, and `not_applicable_reasons` keeps them
 apart: a bare `n/a` means *this unit has no such thing* (no GPU, no quality eval), and
@@ -100,14 +104,26 @@ default request of **0.125 cores and 128 MiB**, and Modal bills `max(request, ac
 | --- | --- | --- |
 | cores | 0.125 cores × 3.4247 s × $0.0000131/core-s | $0.0000056 |
 | memory | 0.125 GiB × 3.4247 s × $0.00000222/GiB-s | $0.0000010 |
-| **actual charge** | | **≈ $0.0000066** |
+| **expected charge** | | **≈ $0.0000066** |
 | published figure | 1 core × 3.4247 s × $0.0000131/core-s | $0.0000449 |
-| | | **about 6.8× the actual charge** |
+| | | **about 6.8× the expected charge** |
+
+**"Expected", not "actual".** Both figures are derived from Modal's published price
+list, so the $0.0000066 is what the documented pricing model says this run should have
+cost, and neither number has been reconciled against a Modal invoice. Calling it the
+actual charge would claim a billing record this repo does not hold.
 
 So the published number is an upper bound, and a large one, not a rounding caveat.
 Both factors of the correction are in the committed ledger, `cpu_request_cores` and
 `memory_request_mib` beside `billed_container_seconds` and the rate, so it is
 re-derivable from the file, not only from this paragraph.
+
+**The generated table shows the upper bound, and it does not carry this paragraph.**
+`cost_per_result_usd` in the committed ledger is $0.0000449, so that is the figure a
+reader of any table rendered from this ledger sees. Saying which of the two numbers the
+table is showing is the honest fix available here. Hand-editing a measured artifact into
+agreement with prose is not, and re-running the probe under a corrected cost model is a
+change to the harness rather than to this run.
 
 Do **not** read the figure as validated by reproducing `3.4247 × 0.0000131`. That
 arithmetic is exact and reproduces the ledger bit-for-bit; what is wrong is its

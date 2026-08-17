@@ -21,9 +21,11 @@ so a reason is a validated field, keyed by line-item name, required to name a fi
 that really is `not_applicable`, and rendered into the published table beside the
 `n/a` it explains. A silent `n/a` is therefore always the first meaning, on purpose.
 
-`per_unit_metrics` is the escape hatch for anything unit-specific: a list of
+`per_unit_metrics` is the extension point for anything unit-specific: a list of
 `{name, value, unit}` rows a build can add without editing this schema at all. A unit
-that adds none still validates, since the default is an empty list. A row may not take the
+that adds none still validates as far as this module is concerned, since the default is
+an empty list, though the Modal harness requires two of these rows on any ledger it
+emits, because the billed-dollar fields cannot be read without them. A row may not take the
 published label of a mandated line item, and may not repeat another row's name: both
 would silently shadow a row in the rendered table rather than add one.
 
