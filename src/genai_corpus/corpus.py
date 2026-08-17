@@ -1,9 +1,9 @@
 """Corpus manifest loading and checksum verification.
 
-The real ~5 GB frozen corpus (`SPZ-45`) is a Hugging Face dataset, pinned by version in
-each unit's cost ledger and never committed here. This module only knows how to read a
+The real ~5 GB frozen corpus will be a Hugging Face dataset, pinned by version in each
+unit's cost ledger and never committed here. This module only knows how to read a
 `manifest.json` (a flat list of asset records) and check each asset's bytes against its
-recorded `sha256` — the same shape the real corpus manifest will use, exercised here
+recorded `sha256`, the same shape the real corpus manifest will use, exercised here
 against the tiny fixture in `fixtures/corpus/`.
 """
 
@@ -54,7 +54,7 @@ def verify_checksums(manifest_path: str | Path, corpus_root: str | Path) -> list
     """Return the ids of assets whose on-disk sha256 doesn't match the manifest.
 
     An asset with no file on disk at all counts as a mismatch too, rather than
-    raising — a missing asset is the most likely real failure for this check.
+    raising, since a missing asset is the most likely real failure for this check.
     """
     root = Path(corpus_root)
     mismatches: list[str] = []

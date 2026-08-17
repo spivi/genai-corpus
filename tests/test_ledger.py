@@ -18,7 +18,7 @@ from genai_corpus.ledger import (
 from genai_corpus.ledger_table import parse_ledger_markdown_table
 
 # A fully-measured ledger: every field concrete except the three that a unit with no
-# metered API and no quality eval would legitimately mark not-applicable — proving the
+# metered API and no quality eval would legitimately mark not-applicable, proving the
 # sentinel and real measurements coexist on one ledger, not just in isolation.
 _VALID_LEDGER: dict[str, Any] = {
     "unit_id": "C5.7",
@@ -116,7 +116,7 @@ def test_validate_ledger_invented_field_raises_naming_it() -> None:
 
 
 def test_validate_ledger_reports_every_bad_field_not_only_the_first() -> None:
-    """One call, one exception, every fault — not one re-run per mistake."""
+    """One call, one exception, every fault, not one re-run per mistake."""
     data = {**_VALID_LEDGER, "hardware": 12, "input_size_bytes": "a lot"}
     del data["failure_rate"]
 
@@ -159,7 +159,7 @@ def test_validate_ledger_rejects_a_line_break_in_a_string_field() -> None:
 
 #: Every character `str.splitlines()` breaks on beyond `\r` and `\n`. The parser in
 #: `ledger_table` splits with `str.splitlines()`, so a value carrying one of these
-#: passed the old `[\r\n]` validator and then vanished from the parsed table — the row
+#: passed the old `[\r\n]` validator and then vanished from the parsed table, and the row
 #: was absent rather than mismatched, which no comparison would ever report.
 _EXTRA_SPLITLINES_CHARS = (
     "\v",
@@ -201,7 +201,7 @@ def test_a_rejected_character_really_would_have_dropped_the_row(char: str) -> No
     """Why the class had to widen, stated as an executable fact rather than a comment.
 
     Renders the value the validator now refuses and shows the parser losing the Model
-    row entirely — the failure mode is a silently absent row, not a wrong one.
+    row entirely, so the failure mode is a silently absent row, not a wrong one.
     """
     table = f"| Metric | Value |\n| --- | --- |\n| Model | llama{char}3 |\n"
 

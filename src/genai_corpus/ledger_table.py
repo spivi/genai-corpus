@@ -1,16 +1,16 @@
-"""Serialises a validated `CostLedger` into the article's published table (SPZ-44).
+"""Serialises a validated `CostLedger` into the article's published table.
 
 This is what makes "generated, never hand-typed" true rather than aspirational: an
-article's cost table is `render_ledger_markdown_table`'s output, verbatim. Risk 8 in
-the M4 plan names ledger drift between article and repo as a threat to the reader —
-generation from one schema, with a round-trip test proving it, is the mitigation.
+article's cost table is `render_ledger_markdown_table`'s output, verbatim. Ledger
+drift between the article and the repo is a threat to the reader, and generation from
+one schema, with a round-trip test proving it, is what removes it.
 
 Two properties this module owes a public article. Cell values are **escaped**: a
 `|` inside a model name or unit would otherwise open a third column against a
 two-column header, so it is written `\\|` here and unescaped by the parser. No line
 break reaches this point either, and the two modules have to agree on what one *is*:
 the parser below splits with `str.splitlines()`, so `validate_ledger` rejects every
-character `str.splitlines()` breaks on — `\\v`, `\\f`, `\\x1c`, `\\x1d`, `\\x1e`,
+character `str.splitlines()` breaks on: `\\v`, `\\f`, `\\x1c`, `\\x1d`, `\\x1e`,
 `\\x85`, `U+2028` and `U+2029` as well as `\\r` and `\\n`. A narrower validator would
 let a value through that the parser then reads as two lines, dropping the row from the
 parsed table instead of failing a comparison.
@@ -26,7 +26,7 @@ from genai_corpus.ledger import NOT_APPLICABLE, ROW_ORDER, CostLedger
 
 _HEADER = ("| Metric | Value |", "| --- | --- |")
 _NA_TEXT = "n/a"
-_REASON_SEPARATOR = " — "
+_REASON_SEPARATOR = ", "
 
 
 def _escape_cell(text: str) -> str:
@@ -72,8 +72,8 @@ def render_ledger_markdown_table(ledger: CostLedger) -> str:
         lines.append(f"| {_escape_cell(label)} | {value} |")
     for metric in ledger.per_unit_metrics:
         # Through `_format_value`, not around it. These rows carry
-        # `billed_container_seconds` and `hardware_rate_usd_per_second` — the two
-        # numbers a published cost is derived from — so they need the same formatter
+        # `billed_container_seconds` and `hardware_rate_usd_per_second`, the two
+        # numbers a published cost is derived from, so they need the same formatter
         # the round-trip test proves is lossless, not a private one it never sees.
         value = f"{_format_value(metric.value)} {_escape_cell(metric.unit)}"
         lines.append(f"| {_escape_cell(metric.name)} | {value} |")

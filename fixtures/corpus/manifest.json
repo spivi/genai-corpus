@@ -4,27 +4,27 @@
     "kind": "document",
     "path": "docs/brief-001.txt",
     "tags": ["brief", "album-cover", "marionette-strings"],
-    "sha256": "2128ce3f147004fbf1a514b1ed4ee6c184af728afd0b46bcc4a0cd7481745970"
+    "sha256": "e69c91c984b9aa9bf170195b7f6b36207502fc805d6a0c886ceae661a1d5cec2"
   },
   {
     "id": "doc-0002",
     "kind": "document",
     "path": "docs/lyrics-001.txt",
     "tags": ["lyrics", "no-weights-attached"],
-    "sha256": "1ebe5a0bb2a4e82f41518555d8cc77d96f1c2cd3ee4a22764fa75c94714913cc"
+    "sha256": "d9fe9b45eeecc5ac7c453d1f1a18572603e91f570166d1208385b69349f6309f"
   },
   {
     "id": "doc-0003",
     "kind": "document",
     "path": "docs/rights-001.txt",
     "tags": ["rights", "usage-note"],
-    "sha256": "0276ff7ac8c56d16d4d5b62f71389bb04419b88e9dc81f6d3228e38dc2a76412"
+    "sha256": "e8978c8eb7f77892153f2e0f55e9063f69cc0567762e6970106aa2fd3840b5c7"
   },
   {
     "id": "doc-0004",
     "kind": "document",
     "path": "docs/transcript-001.txt",
     "tags": ["transcript", "interview"],
-    "sha256": "bda11495402e581c0d796e38a1334f05a5c485b64e46a1dd535381da453ee7a6"
+    "sha256": "ff2fcbbe76b12dc6d6c676b2dfef7f076e0438d2ada4da1ad42a59aa8151a9f1"
   }
 ]

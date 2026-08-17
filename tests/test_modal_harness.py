@@ -2,7 +2,7 @@
 
 No Modal API call and no credential: `run_and_measure` is exercised with a plain
 Python zero-argument callable, never `some_fn.remote(...)`, and `weights_volume()` /
-`app` construction are themselves credential-free (SPZ-44's CI acceptance criterion).
+`app` construction are themselves credential-free, which is what CI requires.
 """
 
 from __future__ import annotations
@@ -149,7 +149,7 @@ def test_resolve_hardware_rate_rejects_a_malformed_gpu_count(spec: str) -> None:
 
 def test_container_request_falls_back_to_modals_documented_defaults() -> None:
     """A bare `@app.function()` requests 0.125 cores and 128 MiB, and is billed for
-    that — not for the full core `HARDWARE_RATE_USD_PER_SECOND["CPU"]` prices."""
+    that, not for the full core `HARDWARE_RATE_USD_PER_SECOND["CPU"]` prices."""
     assert container_request(_cpu_only) == (DEFAULT_CPU_REQUEST_CORES, DEFAULT_MEMORY_REQUEST_MIB)
 
 
@@ -162,7 +162,7 @@ def test_container_request_takes_the_request_half_of_a_request_limit_pair() -> N
     assert container_request(_request_and_limit) == (1.0, 512.0)
 
 
-def test_container_request_metrics_are_ledger_shaped_provenance_rows() -> None:
+def test_container_request_metrics_are_ledger_shaped_cost_rows() -> None:
     metrics = container_request_metrics(_cpu_only)
 
     assert [metric["name"] for metric in metrics] == ["cpu_request_cores", "memory_request_mib"]
@@ -202,7 +202,7 @@ def test_hardware_rate_table_includes_cpu() -> None:
 
 
 def test_hardware_rate_table_keys_are_modal_gpu_spec_strings() -> None:
-    """Modal's published label is `A10`, not `A10G` — a key it never emits is dead."""
+    """Modal's published label is `A10`, not `A10G`, and a key it never emits is dead."""
     assert "A10G" not in HARDWARE_RATE_USD_PER_SECOND
     assert "A10" in HARDWARE_RATE_USD_PER_SECOND
 
@@ -252,7 +252,7 @@ def test_capture_library_versions_refuses_to_let_extras_shadow_measured_keys() -
 
 
 def test_ledger_from_measurement_never_files_billed_time_as_active_time() -> None:
-    """The SPZ-44 review's P1: the billed span is not CPU-active time, so it is not
+    """A review finding: the billed span is not CPU-active time, so it is not
     written into a field that says it is."""
     measurement = run_and_measure(lambda: 1, hardware=CPU_HARDWARE)
 
@@ -286,7 +286,7 @@ def test_ledger_from_measurement_explains_cpu_time_on_gpu_hardware_too() -> None
     assert "not measured" in ledger.not_applicable_reasons["gpu_active_seconds"]
 
 
-def test_ledger_from_measurement_carries_the_billed_seconds_and_rate_provenance() -> None:
+def test_ledger_from_measurement_carries_the_billed_seconds_and_rate() -> None:
     measurement = run_and_measure(lambda: 1, hardware=CPU_HARDWARE)
 
     ledger = ledger_from_measurement(measurement, unit_id="T-1")
@@ -323,7 +323,7 @@ def test_ledger_from_measurement_lets_the_caller_supply_measured_active_time() -
     assert "cpu_active_seconds" not in ledger.not_applicable_reasons
 
 
-def test_ledger_from_measurement_appends_caller_metrics_after_the_provenance_rows() -> None:
+def test_ledger_from_measurement_appends_caller_metrics_after_the_cost_rows() -> None:
     measurement = run_and_measure(lambda: 1, hardware=CPU_HARDWARE)
 
     ledger = ledger_from_measurement(
@@ -352,7 +352,7 @@ def test_ledger_from_measurement_emits_a_schema_valid_ledger() -> None:
 
 def test_ledger_from_measurement_refuses_a_hardware_that_contradicts_the_measurement() -> None:
     """`**fields` used to win outright, so `hardware="H100"` on a CPU measurement
-    published a GPU ledger priced at the CPU rate — and, because the lane logic reads
+    published a GPU ledger priced at the CPU rate, and, because the lane logic reads
     the same field, one whose GPU lane claimed it was measured and simply missing."""
     measurement = run_and_measure(lambda: 1, hardware=CPU_HARDWARE)
 

@@ -1,10 +1,10 @@
-"""genai-corpus — shared corpus loaders and cost ledger for the Generative AI
+"""genai-corpus: shared corpus loaders and cost ledger for the Generative AI
 Engineering series.
 
-`SPZ-43` defines the package's shape: a minimal loader over a JSON manifest, enough to
-prove the install/import/notebook-smoke-test path against a tiny fixture corpus.
-`SPZ-44` adds the standard twelve-line cost-ledger schema, its validator, the article
-table serialiser, and the Modal run-and-measure harness on top of that skeleton.
+The package's shape is a minimal loader over a JSON manifest, enough to prove the
+install/import/notebook-smoke-test path against a tiny fixture corpus, and on top of
+that skeleton the standard twelve-line cost-ledger schema, its validator, the article
+table serialiser, and the Modal run-and-measure harness.
 """
 
 from __future__ import annotations

@@ -1,9 +1,9 @@
-"""Committed ledger-fixture guards (SPZ-44).
+"""Committed ledger-fixture guards.
 
-Two threats from the PRD's threat model, both enforced as assertions rather than
-left to review: a ledger fixture is schema-valid (proving the hand-run's harness
-output actually satisfies the contract it claims to), and it discloses nothing it
-wasn't meant to publish — no local path, hostname, or credential-shaped string.
+Two threats, both enforced as assertions rather than left to review: a ledger fixture
+is schema-valid (proving the hand-run's harness output actually satisfies the contract
+it claims to), and it discloses nothing it wasn't meant to publish, meaning no local
+path, no hostname, and no credential-shaped string.
 """
 
 from __future__ import annotations
@@ -19,12 +19,15 @@ from genai_corpus.modal_harness import container_request, cpu_probe
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 LEDGER_FIXTURES_DIR = REPO_ROOT / "fixtures" / "ledgers"
-HAND_RUN_FIXTURE = LEDGER_FIXTURES_DIR / "spz-44-hand-run.json"
+HAND_RUN_FIXTURE = LEDGER_FIXTURES_DIR / "hand-run.json"
 
-# Known-sensitive strings from the machine SPZ-44's hand-run was executed on, checked
-# against the committed fixture regardless of which machine runs this test — computing
+# Home-directory prefixes from whichever machine ran the hand-run, checked against the
+# committed fixture regardless of which machine runs this test, because computing
 # "the current machine's hostname" at test time would miss exactly the leak this guards.
-_FORBIDDEN_SUBSTRINGS = ("/Users/", "Spivis-MacBook-Pro", "\\Users\\")
+_FORBIDDEN_SUBSTRINGS = ("/Users/", "\\Users\\", "/home/")
+# A personal machine name is the other way a hostname reaches a ledger. It is matched by
+# shape so that no real hostname has to be written down in a public repo to guard it.
+_HOSTNAME_SHAPED = re.compile(r"\b[A-Za-z0-9]+s-MacBook(?:-Pro|-Air)?\b|\b[\w-]+\.local\b")
 # Modal token IDs/secrets are shaped like `ak-...` / `as-...`.
 _TOKEN_SHAPED = re.compile(r"\ba[ks]-[A-Za-z0-9]{20,}\b")
 
@@ -36,7 +39,7 @@ def _ledger_fixture_files() -> list[Path]:
 
 
 def test_at_least_one_hand_run_ledger_fixture_is_committed() -> None:
-    assert _ledger_fixture_files(), "SPZ-44 requires the Modal hand-run ledger as a fixture"
+    assert _ledger_fixture_files(), "the Modal hand-run ledger must be committed as a fixture"
 
 
 def test_ledger_fixtures_contain_no_local_path_or_hostname() -> None:
@@ -44,6 +47,8 @@ def test_ledger_fixtures_contain_no_local_path_or_hostname() -> None:
         text = path.read_text()
         for forbidden in _FORBIDDEN_SUBSTRINGS:
             assert forbidden not in text, f"{path.name}: contains {forbidden!r}"
+        match = _HOSTNAME_SHAPED.search(text)
+        assert match is None, f"{path.name}: contains a machine-name-shaped string"
 
 
 def test_ledger_fixtures_contain_no_credential_shaped_token() -> None:
@@ -57,11 +62,11 @@ def test_ledger_fixtures_are_all_schema_valid() -> None:
         validate_ledger(json.loads(path.read_text()))
 
 
-def test_ledger_fixture_costs_are_re_derivable_from_their_own_provenance() -> None:
+def test_ledger_fixture_costs_are_re_derivable_from_their_own_rows() -> None:
     """A published dollar figure must be recomputable later, not only re-asserted.
 
     Every fixture carries the billed seconds and the USD/second rate that priced them,
-    with the rate's vintage in its unit string — so `cost = seconds x rate` is a check
+    with the rate's vintage in its unit string, so `cost = seconds x rate` is a check
     a reader can run against the committed file years after the price page changed.
     """
     for path in _ledger_fixture_files():
@@ -80,7 +85,7 @@ def test_ledger_fixtures_record_what_the_container_asked_for() -> None:
     `HARDWARE_RATE_USD_PER_SECOND["CPU"]` prices a *full* core, and Modal bills
     `max(request, actual)`, so a container on the 0.125-core default is charged about
     an eighth of that plus memory. Without the request in the ledger, the only way to
-    find that out is a README paragraph — the same provenance standard the rate row
+    find that out is a README paragraph, the same standard the rate row
     already meets, applied to the other factor.
     """
     for path in _ledger_fixture_files():
@@ -109,7 +114,7 @@ def test_ledger_fixtures_never_publish_an_unexplained_cpu_active_time_na() -> No
     on `cpu_active_seconds` claims something false.
 
     The harness times billed container span, not in-container compute; recording that
-    span under `cpu_active_seconds` was the SPZ-44 review's P1. A committed fixture
+    span under `cpu_active_seconds` was a review finding. A committed fixture
     either carries a real active-time measurement or says why it does not.
     """
     for path in _ledger_fixture_files():

@@ -1,9 +1,9 @@
-Fixture lyric fragment — "No Weights Attached" (working title, fictional band).
+Fixture lyric fragment, "No Weights Attached" (working title, fictional band).
 
   Cut the strings the old way learned them,
   freeze the weights, let the small ones move,
-  a low-rank line across the puppet stage —
+  a low-rank line across the puppet stage,
   no weights attached, just the update proves.
 
-This file is a synthetic loader fixture (SPZ-43), not corpus content. Real corpus
-generation is SPZ-45.
+This file is a synthetic loader fixture, not corpus content. The real corpus is
+generated separately.

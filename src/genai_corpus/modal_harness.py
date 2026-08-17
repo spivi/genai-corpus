@@ -1,16 +1,16 @@
-"""The Modal run-and-measure harness (SPZ-44).
+"""The Modal run-and-measure harness.
 
 Measuring is a side effect of running, not a second step an author must remember:
 `run_and_measure` wraps one call and returns its result alongside the seconds and
 dollars that call took, and `ledger_from_measurement` turns that straight into a
 validated `CostLedger`. If either were a separate step, the ledger would eventually be
 estimated instead of measured, and the series loses the one thing that distinguishes
-it (M4 plan).
+it.
 
 **What is measured is billed container time, not active compute.** The timer wraps a
 `.remote()` invocation from the client side, so the span includes container cold
-start, scheduling and the RPC round trip. That is the right basis for *cost* — Modal
-bills a function's container for the seconds it is up — and the wrong basis for a
+start, scheduling and the RPC round trip. That is the right basis for *cost*, since
+Modal bills a function's container for the seconds it is up, and the wrong basis for a
 field named `gpu_active_seconds`. So the measurement is named for what it is,
 `billed_container_seconds`, and it reaches the ledger as a `per_unit_metric` under
 that name. An active-time line item is recorded as `not_applicable` *with a stated
@@ -25,7 +25,7 @@ Cost is `billed_container_seconds` times a pinned USD/second rate for the hardwa
 `RATE_TABLE_VERIFIED_ON`). The rate and its vintage travel into every emitted ledger,
 so a published dollar figure is re-derivable later rather than only re-assertable, and
 `test_modal_harness.py` fails once the table is older than
-`RATE_TABLE_MAX_AGE_DAYS` — a price is a dated fact, not a permanent one.
+`RATE_TABLE_MAX_AGE_DAYS`, because a price is a dated fact, not a permanent one.
 
 `weights_volume()` is the one sanctioned place later GPU units write model weights.
 No function in this package writes a weight file to local disk; the repo's own
@@ -67,7 +67,7 @@ CPU_HARDWARE: Final = "CPU"
 # "CPU" prices one *full physical core*-second. Modal bills a container for the cores
 # it actually requests (minimum 0.125, and 0.125 is also the default) plus memory
 # GiB-seconds at MEMORY_RATE_USD_PER_GIB_SECOND, so a CPU figure priced from this key
-# is an upper bound — a large one — unless the container asks for a whole core. See
+# is an upper bound, and a large one, unless the container asks for a whole core. See
 # `container_request_metrics`, which records what a container actually asked for.
 #
 # Deliberately omitted: **RTX PRO 6000**, published at $0.000842/s. Its `gpu=` spec
@@ -92,7 +92,7 @@ HARDWARE_RATE_USD_PER_SECOND: Final[dict[str, float]] = {
 
 #: USD per GiB-second of requested memory, billed on top of the core rate above.
 #: Source: https://modal.com/pricing, verified RATE_TABLE_VERIFIED_ON. Nothing in this
-#: module prices with it yet — `cost_usd` is core-seconds only — so it is here to make
+#: module prices with it yet, since `cost_usd` is core-seconds only, so it is here to make
 #: the memory half of a bill *checkable* rather than to quietly fold it in.
 MEMORY_RATE_USD_PER_GIB_SECOND: Final[float] = 0.00000222
 
@@ -105,7 +105,7 @@ DEFAULT_MEMORY_REQUEST_MIB: Final[float] = 128.0
 
 #: The day the table above was last checked against modal.com/pricing, in full.
 RATE_TABLE_VERIFIED_ON: Final[date] = date(2026, 8, 10)
-#: One quarter — roughly the M4 milestone's span. Past this the rate table is treated
+#: One quarter. Past this the rate table is treated
 #: as unverified and the test suite fails, rather than quietly pricing on stale data.
 RATE_TABLE_MAX_AGE_DAYS: Final[int] = 90
 
@@ -120,7 +120,7 @@ class HardwareMismatchError(ValueError):
 class RunMeasurement[T]:
     """One call's result, plus what it measurably cost to produce.
 
-    `billed_container_seconds` is wall-clock around the invocation — the span Modal
+    `billed_container_seconds` is wall-clock around the invocation, the span Modal
     bills, cold start and RPC included. It is deliberately *not* called GPU or CPU
     active time; see this module's docstring.
     """
@@ -144,7 +144,7 @@ def resolve_hardware_rate(hardware: str) -> float:
     as free, which is the one failure mode a cost ledger must not have.
 
     The branch is on the *separator*, not on the count text. Keying off `count_text`
-    made `"H100:"` fall through to the single-GPU rate — an empty string is falsy —
+    made `"H100:"` fall through to the single-GPU rate, because an empty string is falsy,
     while `"H100:0"`, `"H100:-2"` and `"H100:many"` were all correctly rejected. A
     malformed spec is malformed whether or not it happens to be empty.
     """
@@ -192,7 +192,7 @@ def _requested(spec_value: object, default: float) -> float:
 
 
 def container_request(function: modal.Function) -> tuple[float, float]:
-    """The cores and MiB `function`'s container requests — derived, not assumed.
+    """The cores and MiB `function`'s container requests, derived rather than assumed.
 
     Modal bills `max(request, actual)` for both, so the request is what a bare
     `@app.function()` is charged for: pricing such a run at one full core overstates
@@ -214,7 +214,7 @@ def container_request(function: modal.Function) -> tuple[float, float]:
 def container_request_metrics(function: modal.Function) -> list[dict[str, Any]]:
     """`container_request` as ledger rows, so a published cost stays correctable.
 
-    The rate a run was priced at is already ledger provenance; what the container
+    The rate a run was priced at is already in the ledger; what the container
     *asked for* is the other half of the same arithmetic, and without it a reader
     cannot tell a full-core charge from a one-eighth-core one. Pass the result as
     `per_unit_metrics=` to `ledger_from_measurement`.
@@ -231,7 +231,7 @@ def run_and_measure[T](
 ) -> RunMeasurement[T]:
     """Run `call` once and return its result with the seconds/dollars it took.
 
-    `call` is a zero-argument closure — typically `lambda: some_fn.remote(x, y)` — so
+    `call` is a zero-argument closure, typically `lambda: some_fn.remote(x, y)`, so
     the timer wraps exactly the remote invocation. Pass `function=some_fn` to have the
     named `hardware` checked against that function's own `gpu=` spec; a disagreement
     raises `HardwareMismatchError` before the call runs. An unrecognized `hardware`
@@ -257,12 +257,12 @@ def run_and_measure[T](
 
 
 def capture_library_versions(extra: dict[str, str] | None = None) -> dict[str, str]:
-    """The interpreter/package versions this run used — a ledger field, not a comment.
+    """The interpreter/package versions this run used: a ledger field, not a comment.
 
     `extra` records the libraries a *unit* depends on, which this package cannot know:
-    the M4 plan's Risk 4 is about bitsandbytes' 8-bit optimizers and the MPS backend,
+    the risk here is bitsandbytes' 8-bit optimizers and the MPS backend,
     so a QLoRA unit passes `{"torch": ..., "bitsandbytes": ...}` here rather than
-    hand-merging keys into the ledger afterwards. Shadowing a base key is refused —
+    hand-merging keys into the ledger afterwards. Shadowing a base key is refused, since
     a version this harness measured must not be overwritten with a claimed one.
     """
     versions = {
@@ -297,7 +297,7 @@ def _unmeasured_active_time_reasons(hardware: str, payload: dict[str, Any]) -> d
 
 
 def _measurement_metrics(measurement: RunMeasurement[Any]) -> list[dict[str, Any]]:
-    """The cost provenance every emitted ledger carries, so a figure is re-derivable."""
+    """The cost record every emitted ledger carries, so a figure is re-derivable."""
     return [
         {
             "name": "billed_container_seconds",
@@ -315,18 +315,18 @@ def _measurement_metrics(measurement: RunMeasurement[Any]) -> list[dict[str, Any
 def ledger_from_measurement(
     measurement: RunMeasurement[Any], unit_id: str, results: int = 1, **fields: Any
 ) -> CostLedger:
-    """Build a validated `CostLedger` from a measurement — the seam, not a hand-copy.
+    """Build a validated `CostLedger` from a measurement: the seam, not a hand-copy.
 
     Fills the run metadata, the hardware, the cost line items (from `results`, the
     number of results the run produced) and the two active-time items, and attaches
     the billed seconds and the rate that priced them as `per_unit_metrics`. Any line
     item you pass in `fields` wins, including `per_unit_metrics` rows, which are
-    appended to the provenance rows rather than replacing them.
+    appended to the cost rows rather than replacing them.
 
     `hardware` is the one line item `fields` may not disagree with. It is what priced
     the run, and it also decides which active-time lane gets a stated reason, so a
     ledger whose hardware and rate came from different machines would misdescribe both
-    its cost and its GPU lane — silently, and in the published table.
+    its cost and its GPU lane, silently, and in the published table.
 
     A line item you do not pass is recorded as a silent `not_applicable`, which this
     schema reads as *this unit has no such thing*. If your unit **has** one but did not
@@ -375,7 +375,7 @@ def cpu_probe(n: int) -> int:
     """A trivial CPU function this package's one mandated hand-run exercises.
 
     Not part of the public API (not exported from `__init__.py`): it exists only so
-    `scripts/hand_run_spz44.py` has something real to run on Modal, proving the
+    `scripts/hand_run.py` has something real to run on Modal, proving the
     harness round-trips through the live service rather than only through mocks.
     """
     return sum(range(n))

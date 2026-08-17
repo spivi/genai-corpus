@@ -65,9 +65,9 @@ _ROUND_MANDATED_FLOATS: dict[str, Any] = {
 def _assert_metric_rows_equal_the_ledgers(ledger: CostLedger, parsed: dict[str, str]) -> None:
     """The same non-circular check, extended to `per_unit_metrics`.
 
-    Not decoration: the SPZ-44 review's P1 fix moved `billed_container_seconds` and
-    `hardware_rate_usd_per_second` — the two numbers every published cost is derived
-    from — out of `ROW_ORDER` and into these rows. A renderer that rounded them to one
+    Not decoration: a review fix moved `billed_container_seconds` and
+    `hardware_rate_usd_per_second`, the two numbers every published cost is derived
+    from, out of `ROW_ORDER` and into these rows. A renderer that rounded them to one
     decimal would publish a rate of `0.0`, i.e. a free run, while every mandated row
     still round-tripped. The cell is `"<value> <unit>"` and a unit may itself contain
     spaces, so only the first space separates them.
@@ -94,7 +94,7 @@ def _assert_table_numbers_equal_the_ledgers(ledger: CostLedger) -> None:
         cell = parsed[label]
         reason = ledger.not_applicable_reasons.get(field_name)
         if value == NOT_APPLICABLE:
-            assert cell == ("n/a" if reason is None else f"n/a — {reason}")
+            assert cell == ("n/a" if reason is None else f"n/a, {reason}")
         elif isinstance(value, bool):
             raise AssertionError(f"{field_name}: bool is not a ledger value type")
         elif isinstance(value, int):
@@ -129,7 +129,7 @@ def test_render_ledger_markdown_table_publishes_the_reason_beside_the_na() -> No
 
     table = render_ledger_markdown_table(ledger)
 
-    assert "| CPU active time (s) | n/a — not measured: billed span only |" in table
+    assert "| CPU active time (s) | n/a, not measured: billed span only |" in table
 
 
 def test_render_ledger_markdown_table_appends_per_unit_metric_rows() -> None:
@@ -165,9 +165,9 @@ def test_the_round_trip_check_catches_a_lossy_formatter(
 def test_the_round_trip_check_catches_a_lossy_formatter_on_a_per_unit_metric_row(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The same proof, isolated to the rows the P1 fix made load-bearing.
+    """The same proof, isolated to the rows the fix made load-bearing.
 
-    The test above would pass even if the check skipped `per_unit_metrics` entirely —
+    The test above would pass even if the check skipped `per_unit_metrics` entirely, since
     a mandated float fails first. Here every mandated float is round, so an
     `AssertionError` can only come from the metric row: `billed_container_seconds`
     rendered as `3.4` rather than `3.4246967090293765`.

@@ -1,35 +1,35 @@
-"""The standard cost ledger (SPZ-44): a contract with a validator, not a docstring.
+"""The standard cost ledger: a contract with a validator, not a docstring.
 
-`M4-generative-ai-engineering.md` mandates twelve line items for every lesson:
+The series standardises twelve line items for every lesson:
 hardware, model and precision, input and output size, assets processed, embedding or
 generation calls, metered tokens, GPU and CPU active time, storage and egress,
 cache-hit rate, cost per result and per 1,000, quality metric, failure rate. Several
 are inherently a pair of measurements (e.g. "input and output size" needs its own
-number per side) — `CostLedger` expresses the twelve items as eighteen typed fields,
+number per side), so `CostLedger` expresses the twelve items as eighteen typed fields,
 one per measurement, each carrying its unit in its name (`gpu_active_seconds`, not
 `gpu_time`).
 
 Every one of those eighteen fields is *required to be explicit*: a measured value of
 the field's type, or the `NOT_APPLICABLE` sentinel. A required field silently filled
-with zero teaches a reader to skim the table, so the schema forbids silence — a unit
+with zero teaches a reader to skim the table, so the schema forbids silence, and a unit
 that doesn't measure something must say so.
 
 `NOT_APPLICABLE` has exactly two sanctioned meanings, and `not_applicable_reasons`
 is what keeps them apart: *this unit has no such thing* (no GPU, no quality eval), or
 *this unit did not measure it*. The second is only honest when the reason is stated,
-so a reason is a validated field — keyed by line-item name, required to name a field
+so a reason is a validated field, keyed by line-item name, required to name a field
 that really is `not_applicable`, and rendered into the published table beside the
 `n/a` it explains. A silent `n/a` is therefore always the first meaning, on purpose.
 
 `per_unit_metrics` is the escape hatch for anything unit-specific: a list of
 `{name, value, unit}` rows a build can add without editing this schema at all. A unit
-that adds none still validates — the default is an empty list. A row may not take the
+that adds none still validates, since the default is an empty list. A row may not take the
 published label of a mandated line item, and may not repeat another row's name: both
 would silently shadow a row in the rendered table rather than add one.
 
-`validate_ledger` is the enforcement. It collects **every** problem in a raw dict —
-missing fields, fields outside the schema, wrong types, unsupported schema versions,
-multi-line strings that would shatter a markdown table — and raises once, listing all
+`validate_ledger` is the enforcement. It collects **every** problem in a raw dict
+(missing fields, fields outside the schema, wrong types, unsupported schema versions,
+multi-line strings that would shatter a markdown table) and raises once, listing all
 of them; `.field` names the first, `.problems` carries the rest.
 """
 
@@ -80,7 +80,7 @@ RESERVED_ROW_LABELS: Final[frozenset[str]] = frozenset(label for _, label in ROW
 
 _NUMBER_TYPES: Final = (int, float)
 # `X | Literal[...]` resolves to `typing.Union`, not the `types.UnionType` a plain
-# `X | Y` of two classes gives — accept both so this doesn't silently stop matching.
+# `X | Y` of two classes gives. Accept both, so this doesn't silently stop matching.
 _UNION_ORIGINS: Final = (typing.Union, types.UnionType)
 # A ledger value is one table cell. A newline does not escape in markdown; it ends the
 # row, so a multi-line value silently truncates the published table rather than wrap.
@@ -112,7 +112,7 @@ class LedgerValidationError(ValueError):
         self.field = field_name
         joined = "; ".join(f"field '{name}': {text}" for name, text in self.problems)
         if len(self.problems) > 1:
-            joined = f"{len(self.problems)} invalid fields — {joined}"
+            joined = f"{len(self.problems)} invalid fields: {joined}"
         super().__init__(joined)
 
 
@@ -344,10 +344,10 @@ def validate_ledger(data: dict[str, Any]) -> CostLedger:
 
 
 def ledger_to_dict(ledger: CostLedger) -> dict[str, Any]:
-    """The JSON-ready dict form — what a build actually emits to disk.
+    """The JSON-ready dict form, which is what a build actually emits to disk.
 
     `per_unit_metrics` comes back as a `list`, matching the JSON array a real ledger
-    file has and the shape `validate_ledger` accepts back in — a `tuple` would
+    file has and the shape `validate_ledger` accepts back in, where a `tuple` would
     round-trip through Python fine but has no JSON equivalent.
     """
     payload = asdict(ledger)

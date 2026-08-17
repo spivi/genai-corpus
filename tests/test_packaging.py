@@ -1,4 +1,4 @@
-"""The package's version is one string, not two that agree today (SPZ-44).
+"""The package's version is one string, not two that agree today.
 
 `__version__` is a published ledger field, so a `pyproject.toml` that restated it
 would eventually let a committed ledger claim a version that was never released.

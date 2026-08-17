@@ -1,20 +1,20 @@
-"""SPZ-44's one mandated hand-run against live Modal — run manually, never by CI.
+"""The one hand-run against live Modal: run manually, never by CI.
 
 Calls `genai_corpus.modal_harness.cpu_probe` once on CPU hardware through
 `run_and_measure`, hands the measurement to `ledger_from_measurement`, and writes the
-resulting ledger to `fixtures/ledgers/spz-44-hand-run.json` as committed proof the
+resulting ledger to `fixtures/ledgers/hand-run.json` as committed proof the
 harness round-trips through the real service, not only through mocks.
 
 Note what this script does *not* do: hand-copy measured numbers into a ledger literal.
 Every measured field arrives through the seam, and the only values written here are
-the ones a human genuinely knows and the harness cannot — how many bytes went in, what
+the ones a human genuinely knows and the harness cannot: how many bytes went in, what
 came back, and that the single observed call did not fail.
 
 Needs `~/.modal.toml` (or `MODAL_TOKEN_ID`/`MODAL_TOKEN_SECRET`) locally. Never wired
-into CI or any test — the whole point of `run_and_measure`'s design is that this is
+into CI or any test, because the whole point of `run_and_measure`'s design is that this is
 the only place in the repo a Modal call happens, and it happens by hand, once.
 
-Usage: `python scripts/hand_run_spz44.py`
+Usage: `python scripts/hand_run.py`
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ from genai_corpus.modal_harness import (  # noqa: E402
 )
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-OUTPUT_PATH = REPO_ROOT / "fixtures" / "ledgers" / "spz-44-hand-run.json"
+OUTPUT_PATH = REPO_ROOT / "fixtures" / "ledgers" / "hand-run.json"
 PROBE_N = 1_000_000
 
 
@@ -52,7 +52,7 @@ def main() -> None:
 
     ledger = ledger_from_measurement(
         measurement,
-        unit_id="SPZ-44-hand-run",
+        unit_id="genai-corpus-hand-run",
         input_size_bytes=len(str(PROBE_N).encode()),
         output_size_bytes=len(str(measurement.result).encode()),
         assets_processed_count=1,

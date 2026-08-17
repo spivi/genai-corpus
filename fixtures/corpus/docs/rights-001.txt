@@ -5,5 +5,5 @@ for use in the Generative AI Engineering series (spivitz.com) under the same ter
 the rest of the corpus. This is the failure mode C2 demonstrates: a visually similar
 asset without a note like this one is not usable, however good the retrieval match.
 
-This file is a synthetic loader fixture (SPZ-43), not corpus content. Real corpus
-generation is SPZ-45.
+This file is a synthetic loader fixture, not corpus content. The real corpus is
+generated separately.

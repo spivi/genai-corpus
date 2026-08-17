@@ -1,6 +1,6 @@
-# --- Media, by extension — the corpus never enters git (SPZ-43) ---
+# --- Media, by extension: the corpus never enters git ---
 # GitHub LFS free tier is ~1 GB against a 5 GB corpus cap. Real corpus media lives on
-# Hugging Face (SPZ-45). This list is the enforcement mechanism, not a note in a README —
+# Hugging Face. This list is the enforcement mechanism rather than a note in a README, so
 # treat any addition to the real corpus's asset kinds as an addition here too.
 # Images
 *.png
@@ -29,7 +29,7 @@
 *.mkv
 *.webm
 *.m4v
-# Model weights — never local disk per the M4 plan; Modal volumes only
+# Model weights: never local disk in this series; Modal volumes only
 *.pt
 *.pth
 *.safetensors
@@ -56,7 +56,7 @@ htmlcov/
 # --- Notebooks ---
 .ipynb_checkpoints/
 # nbconvert output, written by the README's local command and by CI's notebook
-# smoke test — never the notebook source itself.
+# smoke test, and never the notebook source itself.
 *.nbconvert.ipynb
 executed_*.ipynb
 

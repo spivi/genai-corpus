@@ -1,4 +1,4 @@
-"""Fixture-size guard (SPZ-43): enforced as an assertion, not a README note.
+"""Fixture-size guard: enforced as an assertion, not a README note.
 
 GitHub's LFS free tier is roughly 1 GB against the real corpus's 5 GB cap, so no
 corpus media may ever enter this git history. This test is the local half of that
