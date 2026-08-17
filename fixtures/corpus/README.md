@@ -7,5 +7,5 @@ asset is a plain-text document, so nothing here trips the media-by-extension ign
 rules in `.gitignore`.
 
 The real corpus is generated separately, capped at 5 GB, frozen as `v1.0` with its own
-checksum manifest, and published as a Hugging Face dataset. It does not exist yet. It is
+checksum manifest, and will be published as a Hugging Face dataset. It does not exist yet. It is
 never committed to this or any series repo.
